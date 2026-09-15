@@ -40,7 +40,7 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # 1. Membersihkan baris konfigurasi yang rusak di app/build.gradle jika ada
+      # 1. Membersihkan konfigurasi yang rusak jika ada
       - name: Clean Up Broken Configurations
         working-directory: ./android/app
         run: |
@@ -48,7 +48,7 @@ jobs:
             sed -i '/configurations.all/d' build.gradle
           fi
 
-      # 2. Konfigurasi file pendukung Android yang diperlukan
+      # 2. Konfigurasi file pendukung Android
       - name: Fix Missing Android Configuration Files
         working-directory: ./android
         run: |
@@ -64,14 +64,27 @@ jobs:
             sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 23/g' variables.gradle
           fi
 
-      # 3. Membuat Gradle Wrapper dan memberikan izin eksekusi
+      # 3. MEMASUKKAN ATURAN PEMAKSAAN VERSI ANDROIDX DENGAN AMAN
+      # Perintah ini ditaruh di akhir file build.gradle bagian app agar tidak merusak fungsi utama
+      - name: Force AndroidX Core Version
+        working-directory: ./android/app
+        run: |
+          echo "" >> build.gradle
+          echo "configurations.all {" >> build.gradle
+          echo "    resolutionStrategy {" >> build.gradle
+          echo "        force 'androidx.core:core:1.13.1'" >> build.gradle
+          echo "        force 'androidx.core:core-ktx:1.13.1'" >> build.gradle
+          echo "    }" >> build.gradle
+          echo "}" >> build.gradle
+
+      # 4. Membuat Gradle Wrapper dan memberikan izin eksekusi
       - name: Generate Gradle Wrapper
         working-directory: ./android
         run: |
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      # 4. Build Android APK menggunakan wrapper
+      # 5. Build Android APK menggunakan wrapper
       - name: Build Android APK
         working-directory: ./android
         run: ./gradlew assembleDebug
