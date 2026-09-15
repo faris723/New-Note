@@ -1,0 +1,6 @@
+{
+  "appId": "com.catatanpintar.app",
+  "appName": "Catatan Pintar",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

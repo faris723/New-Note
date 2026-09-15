@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Catatan Pintar</string>
+    <string name="title_activity_main">Catatan Pintar</string>
+    <string name="package_name">com.catatanpintar.app</string>
+    <string name="custom_url_scheme">com.catatanpintar.app</string>
+</resources>

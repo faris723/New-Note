@@ -1,0 +1,6 @@
+{
+  "name": "Catatan Pintar — Offline",
+  "description": "Aplikasi catatan pintar dan manajemen keuangan lokal-pertama (offline-first) dengan penyimpanan native Capacitor Filesystem, pratinjau lampiran, rekaman suara, dan manajemen hutang.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
