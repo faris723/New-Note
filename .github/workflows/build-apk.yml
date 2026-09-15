@@ -40,7 +40,15 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # 1. Konfigurasi file pendukung Android
+      # 1. Membersihkan baris konfigurasi yang rusak di app/build.gradle jika ada
+      - name: Clean Up Broken Configurations
+        working-directory: ./android/app
+        run: |
+          if grep -q "configurations.all" build.gradle; then
+            sed -i '/configurations.all/d' build.gradle
+          fi
+
+      # 2. Konfigurasi file pendukung Android yang diperlukan
       - name: Fix Missing Android Configuration Files
         working-directory: ./android
         run: |
@@ -56,21 +64,14 @@ jobs:
             sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 23/g' variables.gradle
           fi
 
-      # 2. Menaikkan minSdk langsung di build.gradle
-      - name: Update MinSdk in App Build.Gradle
-        working-directory: ./android/app
-        run: |
-          sed -i 's/minSdk [0-9]*/minSdk 23/g' build.gradle
-          sed -i 's/minSdkVersion [0-9]*/minSdkVersion 23/g' build.gradle
-
-      # 3. MEMBUAT KEMBALI GRADLE WRAPPER (Solusi error gradlew tidak ditemukan)
+      # 3. Membuat Gradle Wrapper dan memberikan izin eksekusi
       - name: Generate Gradle Wrapper
         working-directory: ./android
         run: |
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      # 4. Build Android APK menggunakan wrapper yang baru dibuat
+      # 4. Build Android APK menggunakan wrapper
       - name: Build Android APK
         working-directory: ./android
         run: ./gradlew assembleDebug
