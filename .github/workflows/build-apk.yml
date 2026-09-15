@@ -40,8 +40,8 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # PERBAIKAN BARU: Membuat gradle.properties dan settings.gradle yang hilang
-      - name: Fix Missing Android Configuration Files
+      # PERBAIKAN: Menaikkan minSdkVersion menjadi 23 untuk mencocokkan plugin filesystem
+      - name: Fix MinSdk and Configuration Files
         working-directory: ./android
         run: |
           # 1. Mengizinkan penggunaan AndroidX
@@ -54,9 +54,17 @@ jobs:
           echo "project(':capacitor-cordova-android-plugins').projectDir = new File(rootProject.projectDir, 'capacitor-cordova-android-plugins')" >> settings.gradle
           echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
 
-      - name: Fix AndroidX Version Conflict
+          # 3. Mengubah minSdkVersion menjadi 23 di variables.gradle jika ada, atau menyuntikkannya langsung
+          if [ -f "variables.gradle" ]; then
+            sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 23/g' variables.gradle
+          fi
+
+      # Memaksa minSdkVersion langsung di build.gradle tingkat app agar aman
+      - name: Force MinSdk to 23 in App Build.Gradle
         working-directory: ./android/app
         run: |
+          sed -i 's/minSdk [0-9]*/minSdk 23/g' build.gradle
+          sed -i 's/minSdkVersion [0-9]*/minSdkVersion 23/g' build.gradle
           echo "configurations.all { resolutionStrategy { force 'androidx.core:core:1.13.1'; force 'androidx.core:core-ktx:1.13.1' } }" >> build.gradle
 
       - name: Generate Gradle Wrapper
