@@ -40,14 +40,6 @@ const Filesystem = (typeof window !== 'undefined' && window.Capacitor?.Plugins?.
 
 import { AttachmentService } from './attachment.js';
 
-export const DATA_FILE_NAME = 'catatan_data.json';
-export const ATTACHMENTS_FOLDER = 'attachments';
-
-const DB_NAME = 'CatatanPintarDB';
-const DB_VERSION = 2;
-const LS_NOTES = 'cp_notes_v1';
-const LS_CATS = 'cp_categories_v1';
-
 export const CORE_CATEGORIES = [
   { id: 'pekerjaan', name: 'Pekerjaan', color: '#3d5a6b', icon: '💼', core: true, keywords: ['rapat', 'meeting', 'proyek', 'deadline', 'kantor', 'klien', 'tugas kantor', 'laporan', 'presentasi'] },
   { id: 'keuangan',  name: 'Keuangan',  color: '#47593f', icon: '💰', core: true, keywords: ['rp', 'bayar', 'beli', 'gaji', 'tagihan', 'transfer', 'uang', 'belanja', 'hutang', 'pengeluaran', 'pemasukan', 'tabungan', 'invoice'] },
@@ -56,11 +48,108 @@ export const CORE_CATEGORIES = [
   { id: 'belajar',   name: 'Belajar',   color: '#2f6b5e', icon: '📚', core: true, keywords: ['belajar', 'kuliah', 'ujian', 'materi', 'tugas kuliah', 'kursus', 'buku', 'skripsi'] }
 ];
 
-let dbPromise = null;
+const DB_VERSION = 2;
+
+/**
+ * Detect current execution environment:
+ * - 'app': Standalone PWA, Native Capacitor Android, or launched with ?source=pwa / ?mode=app
+ * - 'browser': Standard web browser tab (Chrome/Safari tab)
+ */
+export function getStorageEnvironment() {
+  if (typeof window === 'undefined') return 'browser';
+
+  // 1. URL search parameter override (e.g., launched from PWA manifest or explicit link)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sourceParam = urlParams.get('source') || urlParams.get('mode');
+    if (sourceParam === 'pwa' || sourceParam === 'app') {
+      return 'app';
+    }
+    if (sourceParam === 'browser' || sourceParam === 'web') {
+      return 'browser';
+    }
+  } catch (e) {}
+
+  // 2. User-selected override in session or local storage
+  try {
+    const override = sessionStorage.getItem('cp_active_env') || localStorage.getItem('cp_active_env');
+    if (override === 'app' || override === 'browser') {
+      return override;
+    }
+  } catch (e) {}
+
+  // 3. Standalone PWA detection or Native Capacitor app detection
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator && window.navigator.standalone === true) ||
+    (typeof document !== 'undefined' && document.referrer && document.referrer.includes('android-app://')) ||
+    (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+  return isStandalone ? 'app' : 'browser';
+}
+
+/**
+ * Get storage configuration (database name, file name, attachments folder)
+ * based on the active environment so App and Browser data are COMPLETELY ISOLATED.
+ */
+export function getStorageConfig(envOverride = null) {
+  const env = envOverride || getStorageEnvironment();
+  const isApp = env === 'app';
+  return {
+    environment: env,
+    isApp,
+    label: isApp ? 'Mode Aplikasi' : 'Mode Browser',
+    fullLabel: isApp ? 'Mode Aplikasi (Data Terisolasi)' : 'Mode Browser (Data Web Terpisah)',
+    icon: isApp ? '📱' : '🌐',
+    dbName: isApp ? 'CatatanPintar_App_DB' : 'CatatanPintar_Browser_DB',
+    dataFileName: isApp ? 'catatan_data_app.json' : 'catatan_data_browser.json',
+    attachmentsFolder: isApp ? 'attachments_app' : 'attachments_browser',
+    lsNotesKey: isApp ? 'cp_app_notes_v1' : 'cp_browser_notes_v1',
+    lsCatsKey: isApp ? 'cp_app_categories_v1' : 'cp_browser_categories_v1'
+  };
+}
+
+export const DATA_FILE_NAME = getStorageConfig().dataFileName;
+export const ATTACHMENTS_FOLDER = getStorageConfig().attachmentsFolder;
+
+/**
+ * Request Persistent Storage from the browser engine (Chromium / WebKit).
+ * Prevents browser cache clearance or storage pressure from wiping IndexedDB data.
+ */
+export async function requestPersistentStorage() {
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+    try {
+      const isPersisted = await navigator.storage.persist();
+      console.log('Persistent Storage status:', isPersisted);
+      return isPersisted;
+    } catch (e) {
+      console.warn('Persistent storage request error:', e);
+    }
+  }
+  return false;
+}
+
+const dbPromiseCache = {
+  app: null,
+  browser: null
+};
+
 let inMemoryCache = {
   notes: null,
   categories: null
 };
+
+export function setStorageEnvironment(env) {
+  if (env !== 'app' && env !== 'browser') return;
+  try {
+    sessionStorage.setItem('cp_active_env', env);
+    localStorage.setItem('cp_active_env', env);
+  } catch (e) {}
+  dbPromiseCache.app = null;
+  dbPromiseCache.browser = null;
+  inMemoryCache.notes = null;
+  inMemoryCache.categories = null;
+}
 
 /* ==========================================================================
    1. CORE CAPACITOR FILESYSTEM PERSISTENCE METHODS
@@ -76,8 +165,10 @@ let inMemoryCache = {
  */
 export async function saveDataToDevice(data) {
   try {
+    const config = getStorageConfig();
     const payload = {
       version: 2,
+      environment: config.environment,
       lastUpdated: Date.now(),
       categories: data.categories || inMemoryCache.categories || [],
       notes: (data.notes || inMemoryCache.notes || []).map(n => ({
@@ -104,17 +195,17 @@ export async function saveDataToDevice(data) {
     // Save to Capacitor Filesystem (Directory.Data)
     try {
       await Filesystem.writeFile({
-        path: DATA_FILE_NAME,
+        path: config.dataFileName,
         data: jsonString,
         directory: Directory.Data,
         encoding: Encoding.UTF8,
         recursive: true
       });
     } catch (fsErr) {
-      console.warn('Capacitor Filesystem writeFile notice:', fsErr);
+      // Running on web fallback (IndexedDB)
     }
 
-    // Always mirror to IndexedDB for instant retrieval and web fallback
+    // Mirror to active environment's isolated IndexedDB
     await syncToIndexedDB(payload.notes, payload.categories);
 
     return { success: true, native: Capacitor.isNativePlatform() };
@@ -132,10 +223,12 @@ export async function saveDataToDevice(data) {
  */
 export async function loadDataFromDevice() {
   try {
+    const config = getStorageConfig();
+
     // 1. Attempt reading from native/web Capacitor Filesystem
     try {
       const result = await Filesystem.readFile({
-        path: DATA_FILE_NAME,
+        path: config.dataFileName,
         directory: Directory.Data,
         encoding: Encoding.UTF8
       });
@@ -152,10 +245,10 @@ export async function loadDataFromDevice() {
         }
       }
     } catch (fsErr) {
-      // File does not exist yet (e.g., fresh install) or web fallback
+      // File does not exist yet or web fallback
     }
 
-    // 2. Fallback to IndexedDB (web preview or migration phase)
+    // 2. Fallback to active isolated IndexedDB
     const idbNotes = await loadNotesFromIndexedDB();
     const idbCats = await loadCategoriesFromIndexedDB();
 
@@ -197,7 +290,8 @@ export async function saveMediaAttachmentToFile(att, noteId) {
   if (att.dataURL && typeof att.dataURL === 'string') {
     const safeExt = att.ext || (att.mime ? att.mime.split('/')[1] : 'bin').split(';')[0];
     const fileName = `${att.id || ('media_' + Date.now())}.${safeExt}`;
-    const relativePath = `${ATTACHMENTS_FOLDER}/${fileName}`;
+    const config = getStorageConfig();
+    const relativePath = `${config.attachmentsFolder}/${fileName}`;
 
     let nativeUri = null;
     let webviewSrc = null;
@@ -293,15 +387,20 @@ export async function readMediaAttachment(att) {
    3. INDEXEDDB UNDERLYING FALLBACK & WEB COMPATIBILITY ENGINE
    ========================================================================== */
 
-function getDB() {
-  if (dbPromise) return dbPromise;
+function getDB(envOverride = null) {
+  const config = getStorageConfig(envOverride);
+  const env = config.environment;
 
-  dbPromise = new Promise((resolve) => {
+  if (dbPromiseCache[env]) {
+    return dbPromiseCache[env];
+  }
+
+  dbPromiseCache[env] = new Promise((resolve) => {
     if (!window.indexedDB) {
       return resolve(null);
     }
 
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+    const request = window.indexedDB.open(config.dbName, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
@@ -326,12 +425,12 @@ function getDB() {
 
     request.onsuccess = (event) => resolve(event.target.result);
     request.onerror = (event) => {
-      console.error('IndexedDB open error:', event.target.error);
+      console.error(`IndexedDB (${config.dbName}) open error:`, event.target.error);
       resolve(null);
     };
   });
 
-  return dbPromise;
+  return dbPromiseCache[env];
 }
 
 async function syncToIndexedDB(notesList, customCats) {
@@ -431,27 +530,76 @@ async function getAttachmentFromIndexedDB(id) {
    ========================================================================== */
 
 export const StorageService = {
+  getStorageEnvironment,
+  getStorageConfig,
+  setStorageEnvironment,
+  requestPersistentStorage,
+
   /**
-   * Migrate legacy data from localStorage into Capacitor Filesystem on first launch.
+   * Migrate legacy unpartitioned data into the active isolated database on first launch.
+   * Also requests Persistent Storage from the browser.
    */
   async autoMigrateLegacyData() {
     try {
-      const rawNotes = localStorage.getItem(LS_NOTES);
-      const rawCats = localStorage.getItem(LS_CATS);
+      // 1. Request persistent storage from browser engine
+      await requestPersistentStorage();
 
-      let migratedSomething = false;
-      let existingData = await loadDataFromDevice();
+      const config = getStorageConfig();
 
+      // Check if active environment already has data
+      const existingData = await loadDataFromDevice();
       let notes = existingData.notes || [];
       let categories = existingData.categories || [];
+
+      // If notes already exist in this environment, no legacy migration needed
+      if (notes.length > 0) {
+        return;
+      }
+
+      // 2. Check if legacy unpartitioned IndexedDB (CatatanPintarDB) has notes
+      if (typeof window !== 'undefined' && window.indexedDB) {
+        try {
+          const legacyDB = await new Promise((resolve) => {
+            const req = window.indexedDB.open('CatatanPintarDB', DB_VERSION);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+          });
+
+          if (legacyDB && legacyDB.objectStoreNames.contains('notes')) {
+            const tx = legacyDB.transaction(['notes', 'categories'], 'readonly');
+            const legacyNotesReq = tx.objectStore('notes').getAll();
+            const legacyCatsReq = tx.objectStore('categories').getAll();
+
+            const [legNotes, legCats] = await Promise.all([
+              new Promise(res => { legacyNotesReq.onsuccess = () => res(legacyNotesReq.result || []); }),
+              new Promise(res => { legacyCatsReq.onsuccess = () => res(legacyCatsReq.result || []); })
+            ]);
+
+            if (Array.isArray(legNotes) && legNotes.length > 0) {
+              console.log(`Auto-migrating ${legNotes.length} notes from legacy CatatanPintarDB to isolated ${config.dbName}...`);
+              const customCats = (legCats || []).filter(c => !c.core);
+              await saveDataToDevice({ notes: legNotes, categories: customCats });
+              inMemoryCache.notes = legNotes;
+              inMemoryCache.categories = customCats;
+              legacyDB.close();
+              return;
+            }
+            legacyDB.close();
+          }
+        } catch (idbErr) {
+          console.warn('Legacy DB check notice:', idbErr);
+        }
+      }
+
+      // 3. Fallback check for old localStorage keys
+      const rawNotes = localStorage.getItem('cp_notes_v1');
+      const rawCats = localStorage.getItem('cp_categories_v1');
 
       if (rawNotes) {
         try {
           const legacyNotes = JSON.parse(rawNotes);
-          if (Array.isArray(legacyNotes) && legacyNotes.length > 0 && notes.length === 0) {
-            console.log(`Migrating ${legacyNotes.length} legacy notes from localStorage to Capacitor Filesystem...`);
+          if (Array.isArray(legacyNotes) && legacyNotes.length > 0) {
             notes = legacyNotes;
-            migratedSomething = true;
           }
         } catch (e) {}
       }
@@ -459,24 +607,98 @@ export const StorageService = {
       if (rawCats) {
         try {
           const legacyCats = JSON.parse(rawCats);
-          if (Array.isArray(legacyCats) && legacyCats.length > 0 && categories.length === 0) {
+          if (Array.isArray(legacyCats) && legacyCats.length > 0) {
             categories = legacyCats;
-            migratedSomething = true;
           }
         } catch (e) {}
       }
 
-      if (migratedSomething) {
-        // Save to native device storage
+      if (notes.length > 0) {
         await saveDataToDevice({ notes, categories });
-        // Completely clear old localStorage keys to release browser memory
-        localStorage.removeItem(LS_NOTES);
-        localStorage.removeItem(LS_CATS);
-        console.log('Legacy localStorage migration completed. localStorage keys purged.');
+        try {
+          localStorage.removeItem('cp_notes_v1');
+          localStorage.removeItem('cp_categories_v1');
+        } catch (e) {}
       }
     } catch (e) {
       console.warn('autoMigrateLegacyData notice:', e);
     }
+  },
+
+  /**
+   * Copy notes and categories between Browser and App environments
+   * @param {string} fromEnv - 'browser' | 'app'
+   * @param {string} toEnv - 'browser' | 'app'
+   */
+  async copyDataBetweenEnvironments(fromEnv, toEnv) {
+    if (fromEnv === toEnv) {
+      return { success: false, message: 'Ruang penyimpanan asal dan tujuan sama.' };
+    }
+
+    const sourceConfig = getStorageConfig(fromEnv);
+    const targetConfig = getStorageConfig(toEnv);
+
+    // Open source DB
+    const sourceDB = await getDB(fromEnv);
+    if (!sourceDB) return { success: false, message: 'Gagal mengakses ruang penyimpanan asal.' };
+
+    const sourceNotes = await new Promise((resolve) => {
+      try {
+        const tx = sourceDB.transaction('notes', 'readonly');
+        const req = tx.objectStore('notes').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      } catch (e) { resolve([]); }
+    });
+
+    const sourceCats = await new Promise((resolve) => {
+      try {
+        const tx = sourceDB.transaction('categories', 'readonly');
+        const req = tx.objectStore('categories').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      } catch (e) { resolve([]); }
+    });
+
+    if (!sourceNotes || sourceNotes.length === 0) {
+      return { success: false, message: `Tidak ada data catatan di ${sourceConfig.label} untuk disalin.` };
+    }
+
+    // Open target DB
+    const targetDB = await getDB(toEnv);
+    if (!targetDB) return { success: false, message: 'Gagal mengakses ruang penyimpanan tujuan.' };
+
+    const tx = targetDB.transaction(['notes', 'categories'], 'readwrite');
+    const targetNotesStore = tx.objectStore('notes');
+    const targetCatsStore = tx.objectStore('categories');
+
+    sourceNotes.forEach(n => targetNotesStore.put(n));
+    (sourceCats || []).filter(c => !c.core).forEach(c => targetCatsStore.put(c));
+
+    await new Promise(res => { tx.oncomplete = () => res(true); });
+
+    // Also persist to target JSON file in Directory.Data
+    try {
+      await Filesystem.writeFile({
+        path: targetConfig.dataFileName,
+        data: JSON.stringify({ version: 2, environment: toEnv, lastUpdated: Date.now(), categories: sourceCats, notes: sourceNotes }, null, 2),
+        directory: Directory.Data,
+        encoding: Encoding.UTF8,
+        recursive: true
+      });
+    } catch (fsErr) {}
+
+    // If current active environment is the target, update inMemoryCache
+    if (getStorageEnvironment() === toEnv) {
+      inMemoryCache.notes = sourceNotes;
+      inMemoryCache.categories = sourceCats;
+    }
+
+    return {
+      success: true,
+      count: sourceNotes.length,
+      message: `Berhasil menyalin ${sourceNotes.length} catatan dari ${sourceConfig.label} ke ${targetConfig.label}.`
+    };
   },
 
   /**

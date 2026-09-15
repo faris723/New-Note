@@ -38,6 +38,8 @@ function cacheElements() {
     'financeBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
     'installAppBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
     'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
+    'envBadgeBtn', 'envBadgeIcon', 'envBadgeText',
+    'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
     'searchInput', 'searchClearBtn',
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
     'chipsRow', 'notesList', 'emptyState', 'fabChat', 'fabAdd',
@@ -1534,6 +1536,94 @@ function bindEventListeners() {
     populateCategorySelect();
     UIService.showToast(`Kategori "${name}" berhasil ditambahkan.`, 'info');
   };
+
+  // Storage Isolation Badge & Modal
+  if (el.envBadgeBtn) {
+    el.envBadgeBtn.onclick = () => {
+      const cfg = StorageService.getStorageConfig();
+      if (el.envModalActiveName) {
+        el.envModalActiveName.textContent = `${cfg.icon} ${cfg.fullLabel}`;
+      }
+      if (el.storageEnvModalOverlay) {
+        el.storageEnvModalOverlay.classList.add('open');
+      }
+    };
+  }
+
+  if (el.closeStorageEnvModalBtn) {
+    el.closeStorageEnvModalBtn.onclick = () => {
+      if (el.storageEnvModalOverlay) el.storageEnvModalOverlay.classList.remove('open');
+    };
+  }
+  if (el.closeStorageEnvModalFootBtn) {
+    el.closeStorageEnvModalFootBtn.onclick = () => {
+      if (el.storageEnvModalOverlay) el.storageEnvModalOverlay.classList.remove('open');
+    };
+  }
+
+  if (el.switchEnvBtn) {
+    el.switchEnvBtn.onclick = async () => {
+      const cur = StorageService.getStorageEnvironment();
+      const target = cur === 'app' ? 'browser' : 'app';
+      StorageService.setStorageEnvironment(target);
+      notes = await StorageService.loadNotes();
+      categories = await StorageService.loadCategories();
+      populateCategorySelect();
+      renderCategoryChips();
+      renderNotesList();
+      updateEnvironmentBadgeUI();
+      await UIService.updateStorageMeter();
+      const newCfg = StorageService.getStorageConfig();
+      if (el.envModalActiveName) {
+        el.envModalActiveName.textContent = `${newCfg.icon} ${newCfg.fullLabel}`;
+      }
+      UIService.showToast(`Beralih ke ${newCfg.label}. Data di ruang ini terpisah dan mandiri.`, 'info');
+    };
+  }
+
+  if (el.copyBrowserToAppBtn) {
+    el.copyBrowserToAppBtn.onclick = async () => {
+      if (confirm('Salin semua catatan dari ruang Browser ke ruang Aplikasi?')) {
+        UIService.showToast('Menyalin data…', 'info');
+        const res = await StorageService.copyDataBetweenEnvironments('browser', 'app');
+        if (res.success) {
+          UIService.showToast(res.message, 'info');
+          if (StorageService.getStorageEnvironment() === 'app') {
+            notes = await StorageService.loadNotes();
+            categories = await StorageService.loadCategories();
+            populateCategorySelect();
+            renderCategoryChips();
+            renderNotesList();
+            await UIService.updateStorageMeter();
+          }
+        } else {
+          UIService.showToast(res.message, 'danger');
+        }
+      }
+    };
+  }
+
+  if (el.copyAppToBrowserBtn) {
+    el.copyAppToBrowserBtn.onclick = async () => {
+      if (confirm('Salin semua catatan dari ruang Aplikasi ke ruang Browser?')) {
+        UIService.showToast('Menyalin data…', 'info');
+        const res = await StorageService.copyDataBetweenEnvironments('app', 'browser');
+        if (res.success) {
+          UIService.showToast(res.message, 'info');
+          if (StorageService.getStorageEnvironment() === 'browser') {
+            notes = await StorageService.loadNotes();
+            categories = await StorageService.loadCategories();
+            populateCategorySelect();
+            renderCategoryChips();
+            renderNotesList();
+            await UIService.updateStorageMeter();
+          }
+        } else {
+          UIService.showToast(res.message, 'danger');
+        }
+      }
+    };
+  }
 }
 
 function renderCategoryManagerList() {
@@ -1599,6 +1689,13 @@ function addChatMessage(role, text, references = []) {
   el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
 }
 
+function updateEnvironmentBadgeUI() {
+  const cfg = StorageService.getStorageConfig();
+  if (el.envBadgeIcon) el.envBadgeIcon.textContent = cfg.icon;
+  if (el.envBadgeText) el.envBadgeText.textContent = cfg.label;
+  if (el.envBadgeBtn) el.envBadgeBtn.title = `Ruang penyimpanan aktif: ${cfg.fullLabel}. Klik untuk rincian isolasi data.`;
+}
+
 /* ==========================================================================
    INITIALIZATION BOOTSTRAP
    ========================================================================== */
@@ -1606,6 +1703,7 @@ function addChatMessage(role, text, references = []) {
 async function init() {
   cacheElements();
   bindEventListeners();
+  updateEnvironmentBadgeUI();
 
   // Initialize Canvas Sketch Service
   try {

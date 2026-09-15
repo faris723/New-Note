@@ -3,7 +3,7 @@
   "name": "Catatan Pintar — Offline",
   "short_name": "Catatan",
   "description": "Catatan pintar offline: tulis catatan, kelola keuangan, dan lampirkan file langsung di perangkat Anda.",
-  "start_url": "./",
+  "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",

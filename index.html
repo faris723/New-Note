@@ -185,6 +185,25 @@
       border-radius: 2px;
       flex-wrap: wrap;
     }
+    .env-badge-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #faf7ef;
+      border: 1px solid var(--card-edge);
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      cursor: pointer;
+      transition: all .15s ease;
+      white-space: nowrap;
+    }
+    .env-badge-btn:hover {
+      background: #eee8d8;
+      border-color: var(--ink-soft);
+    }
     .storage-meter {
       flex: 1;
       min-width: 80px;
@@ -1946,7 +1965,10 @@
     </header>
 
     <!-- Storage Usage Meter & Quota Indicator -->
-    <div class="storage-bar-wrap" id="storageBarWrap" title="Kapasitas penyimpanan perangkat internal (Capacitor Filesystem / Storage)">
+    <div class="storage-bar-wrap" id="storageBarWrap" title="Kapasitas penyimpanan perangkat internal (Terisolasi per ruang)">
+      <button type="button" class="env-badge-btn" id="envBadgeBtn" title="Klik untuk melihat status isolasi ruang data aplikasi vs browser">
+        <span id="envBadgeIcon">📱</span> <span id="envBadgeText">Mode Aplikasi</span>
+      </button>
       <span>💾 Penyimpanan:</span>
       <div class="storage-meter">
         <div class="storage-fill" id="storageFill"></div>
@@ -2428,6 +2450,59 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-cancel" id="closeInstallModalFootBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Isolasi Data (Aplikasi vs Browser) -->
+  <div class="overlay" id="storageEnvModalOverlay">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-head">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🛡️</span> Isolasi Data: Aplikasi vs Browser
+        </h2>
+        <button class="close-btn" id="closeStorageEnvModalBtn">✕</button>
+      </div>
+      <div style="padding:16px 20px; font-size:14px; line-height:1.6; color:var(--ink);">
+        <div style="display:flex; align-items:center; justify-content:space-between; background:var(--paper); padding:10px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:14px;">
+          <div>
+            <div style="font-size:12px; color:var(--ink-soft);">Ruang Penyimpanan Aktif Saat Ini:</div>
+            <div style="font-size:15px; font-weight:700; color:var(--moss-dark);" id="envModalActiveName">📱 Mode Aplikasi (Data Terisolasi)</div>
+          </div>
+          <button type="button" class="btn btn-cancel" id="switchEnvBtn" style="padding:6px 12px; font-size:12px;" title="Ganti tampilan ruang data antara browser dan aplikasi">
+            🔀 Ganti Ruang
+          </button>
+        </div>
+
+        <div style="background:#eef5eb; border:1px solid #cce5c4; border-radius:10px; padding:12px 14px; margin-bottom:12px; font-size:13px; color:#2d4e24;">
+          <b>✅ Data Kini Telah Terpisah & Mandiri:</b>
+          <p style="margin:4px 0 0 0;">
+            Data di <b>Mode Aplikasi</b> disimpan dalam database terisolasi (<code style="background:rgba(0,0,0,0.06); padding:1px 4px; border-radius:3px;">CatatanPintar_App_DB</code>) terpisah dari <b>Mode Browser</b> (<code style="background:rgba(0,0,0,0.06); padding:1px 4px; border-radius:3px;">CatatanPintar_Browser_DB</code>). Menghapus atau menambah catatan di browser <b>tidak akan mempengaruhi</b> data di aplikasi Anda.
+          </p>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:14px; font-size:13px;">
+          <b>🛡️ Perlindungan Cache Browser (Persistent Storage):</b>
+          <p style="margin:4px 0 0 0; color:var(--ink-soft);">
+            Aplikasi otomatis meminta izin penyimpanan persisten (<i>Persistent Storage</i>) ke browser Anda. Pembersihan cache biasa di browser tidak akan menghapus data catatan aplikasi terpasang Anda.
+          </p>
+        </div>
+
+        <div>
+          <b style="font-size:13px; color:var(--ink);">Alat Sinkronisasi Manual (Opsional):</b>
+          <p style="font-size:12px; color:var(--ink-soft); margin:2px 0 8px 0;">Jika Anda memiliki catatan di browser yang ingin dipindahkan ke aplikasi (atau sebaliknya):</p>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button type="button" class="btn btn-cancel" id="copyBrowserToAppBtn" style="width:100%; justify-content:center; padding:8px 14px; font-size:12.5px; text-align:center;">
+              📥 Salin Semua Catatan dari Browser ➔ ke Aplikasi
+            </button>
+            <button type="button" class="btn btn-cancel" id="copyAppToBrowserBtn" style="width:100%; justify-content:center; padding:8px 14px; font-size:12.5px; text-align:center;">
+              📤 Salin Semua Catatan dari Aplikasi ➔ ke Browser
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-save" id="closeStorageEnvModalFootBtn">Tutup</button>
       </div>
     </div>
   </div>
