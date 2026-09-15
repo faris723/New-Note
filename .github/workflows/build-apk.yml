@@ -40,7 +40,6 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # PERBAIKAN FINAL: Membuat settings.gradle yang mendaftarkan SEMUA modul Capacitor
       - name: Fix Missing settings.gradle
         working-directory: ./android
         run: |
@@ -48,6 +47,12 @@ jobs:
           echo "include ':capacitor-cordova-android-plugins'" >> settings.gradle
           echo "project(':capacitor-cordova-android-plugins').projectDir = new File(rootProject.projectDir, 'capacitor-cordova-android-plugins')" >> settings.gradle
           echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
+
+      # PERBAIKAN BARU: Memaksa versi AndroidX agar tidak bentrok
+      - name: Fix AndroidX Version Conflict
+        working-directory: ./android/app
+        run: |
+          echo "configurations.all { resolutionStrategy { force 'androidx.core:core:1.13.1'; force 'androidx.core:core-ktx:1.13.1' } }" >> build.gradle
 
       - name: Generate Gradle Wrapper
         working-directory: ./android
