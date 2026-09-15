@@ -15,7 +15,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # 1. Setup Node.js dan Bun
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -26,38 +25,38 @@ jobs:
         with:
           bun-version: latest
 
-      # 2. Install dependensi dan Build Web Assets
       - name: Install Dependencies
         run: bun install
 
       - name: Build Web App
         run: bun run build
 
-      # 3. Sinkronisasi Web App ke folder Android
       - name: Sync Capacitor Android
         run: bunx cap sync android
 
-      # 4. Setup Java 17 (Wajib untuk Capacitor)
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 5. MEMBUAT ULANG GRADLE WRAPPER (Perbaikan Utama)
-      # Ini akan memastikan versi Gradle yang digunakan sangat cocok dengan Capacitor
+      # PERBAIKAN BARU: Membuat file settings.gradle yang hilang
+      - name: Fix Missing settings.gradle
+        working-directory: ./android
+        run: |
+          echo "include ':app'" > settings.gradle
+          echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
+
       - name: Generate Gradle Wrapper
         working-directory: ./android
         run: |
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      # 6. Melakukan Build APK menggunakan wrapper yang baru dibuat
       - name: Build Android APK
         working-directory: ./android
         run: ./gradlew assembleDebug
 
-      # 7. Mengunggah hasil APK
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
