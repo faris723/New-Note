@@ -13,6 +13,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Catatan Pintar">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -132,6 +135,17 @@
       border-color: var(--moss-dark);
       color: #fff;
     }
+    #installAppBtn {
+      background: var(--moss);
+      color: #faf7ef;
+      border-color: var(--moss-dark);
+      font-weight: 600;
+      box-shadow: 0 2px 5px rgba(71,89,63,0.3);
+    }
+    #installAppBtn:hover {
+      background: var(--moss-dark);
+      color: #fff;
+    }
     #financeBtn:hover {
       border-color: var(--teal);
       color: var(--teal);
@@ -171,6 +185,25 @@
       border-radius: 2px;
       flex-wrap: wrap;
     }
+    .env-badge-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #faf7ef;
+      border: 1px solid var(--card-edge);
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      cursor: pointer;
+      transition: all .15s ease;
+      white-space: nowrap;
+    }
+    .env-badge-btn:hover {
+      background: #eee8d8;
+      border-color: var(--ink-soft);
+    }
     .storage-meter {
       flex: 1;
       min-width: 80px;
@@ -200,6 +233,18 @@
       border-radius: 2px;
     }
     .storage-warning-banner.show { display: block; }
+
+    .recovery-banner {
+      background: #fef2f2;
+      border: 1px solid #f87171;
+      color: #991b1b;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin: 10px 0;
+      line-height: 1.5;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.1);
+    }
 
     .privacy-line {
       font-size: 11px;
@@ -1915,13 +1960,14 @@
     ::-webkit-scrollbar-thumb { background: var(--card-edge); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--ink-soft); }
   </style>
-  <script type="module" crossorigin src="/assets/index-BZdFqhWG.js"></script>
-</head>
+  <script type="module" crossorigin src="./assets/index-Ban2ZrIX.js"></script>
+<link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
 <body>
   <div class="wrap">
     <header>
       <h1>Catatan Pintar</h1>
       <div class="head-actions">
+        <button class="icon-btn" id="installAppBtn" title="Pasang Catatan Pintar sebagai aplikasi">📲 Pasang Aplikasi</button>
         <button class="icon-btn" id="financeBtn">💰 Keuangan</button>
         <button class="icon-btn" id="manageCatBtn">🏷️ Kategori</button>
         <button class="icon-btn" id="filterToggleBtn">🔍 Filter</button>
@@ -1932,7 +1978,10 @@
     </header>
 
     <!-- Storage Usage Meter & Quota Indicator -->
-    <div class="storage-bar-wrap" id="storageBarWrap" title="Kapasitas penyimpanan perangkat internal (Capacitor Filesystem / Storage)">
+    <div class="storage-bar-wrap" id="storageBarWrap" title="Kapasitas penyimpanan perangkat internal (Terisolasi per ruang)">
+      <button type="button" class="env-badge-btn" id="envBadgeBtn" title="Klik untuk melihat status isolasi ruang data aplikasi vs browser">
+        <span id="envBadgeIcon">📱</span> <span id="envBadgeText">Mode Aplikasi</span>
+      </button>
       <span>💾 Penyimpanan:</span>
       <div class="storage-meter">
         <div class="storage-fill" id="storageFill"></div>
@@ -1943,6 +1992,27 @@
     <!-- Storage Warning Banner -->
     <div class="storage-warning-banner" id="storageWarningBanner">
       ⚠️ <b>Peringatan Kapasitas:</b> Ruang penyimpanan perangkat Anda hampir penuh (&gt;80%). Sebaiknya hapus lampiran yang tidak diperlukan atau lakukan ekspor cadangan secara berkala.
+    </div>
+
+    <!-- Disaster Recovery Banner (Anti Browser Wipe) -->
+    <div class="recovery-banner" id="browserWipedRecoveryBanner" style="display:none;">
+      <div style="display:flex; align-items:flex-start; gap:12px;">
+        <span style="font-size:24px;">🛡️</span>
+        <div style="flex:1;">
+          <b style="font-size:14px;">Data Browser Baru Saja Dibersihkan / Kosong</b>
+          <p style="margin:4px 0 10px 0; font-size:12.5px; opacity:0.95;">
+            Apakah Anda baru saja menghapus cookie atau data situs di browser? Jika Anda memiliki berkas brankas atau file cadangan di memori perangkat, Anda dapat memulihkan seluruh catatan Anda sekarang.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-save" id="quickRestoreVaultBtn" style="padding:6px 14px; font-size:12px; background:#b91c1c; border-color:#991b1b;">
+              📂 Pulihkan dari Berkas Brankas Perangkat (.json)
+            </button>
+            <button type="button" class="btn btn-cancel" id="dismissRecoveryBannerBtn" style="padding:6px 12px; font-size:12px; color:inherit; border-color:rgba(0,0,0,0.2);">
+              Abaikan
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <p class="privacy-line"><b>●</b> Privasi total — semua catatan, lampiran, dan pencarian diproses sepenuhnya di perangkat ini. Tidak ada data yang dikirim ke server manapun.</p>
@@ -2370,6 +2440,196 @@
       </div>
       <div class="viewer-body" id="viewerBody"></div>
     </div>
+  </div>
+
+  <!-- Modal Panduan Pasang Aplikasi (PWA) -->
+  <div class="overlay" id="installModalOverlay">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-head">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">📲</span> Pasang Catatan Pintar
+        </h2>
+        <button class="close-btn" id="closeInstallModalBtn">✕</button>
+      </div>
+      <div style="padding:16px 20px; font-size:14px; line-height:1.6; color:var(--ink);">
+        <p style="margin-bottom:12px;">Pasang aplikasi ini di ponsel atau komputer Anda agar dapat dibuka langsung dari layar utama tanpa browser dan dapat digunakan secara 100% offline.</p>
+        
+        <div id="installPromptActionWrap" style="margin-bottom:16px; text-align:center;">
+          <button class="btn btn-save" id="doInstallPromptBtn" style="padding:10px 24px; font-size:15px; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+            <span>📲</span> Pasang Aplikasi Sekarang
+          </button>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:12px;">
+          <b style="color:var(--moss-dark);">📱 Di HP Android (Chrome / Edge):</b>
+          <ol style="margin:6px 0 0 18px; padding:0; font-size:13px;">
+            <li>Tekan tombol hijau <b>Pasang Aplikasi Sekarang</b> di atas, ATAU</li>
+            <li>Tekan menu titik tiga (⋮) di pojok kanan atas browser, lalu pilih <b>"Instal aplikasi"</b> atau <b>"Tambahkan ke Layar Utama"</b>.</li>
+          </ol>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:12px;">
+          <b style="color:var(--slate);">🍎 Di iPhone / iPad (Safari):</b>
+          <ol style="margin:6px 0 0 18px; padding:0; font-size:13px;">
+            <li>Buka situs ini di browser <b>Safari</b>.</li>
+            <li>Tekan tombol <b>Bagikan (Share)</b> <span style="font-size:14px;">📤</span> di bilah bawah layar.</li>
+            <li>Gulir ke bawah dan pilih <b>"Tambah ke Layar Utama" (Add to Home Screen)</b>.</li>
+          </ol>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge);">
+          <b style="color:var(--gold);">💻 Di Laptop / Komputer (Chrome / Edge):</b>
+          <p style="margin:4px 0 0 0; font-size:13px;">Klik ikon pasang aplikasi <span style="display:inline-block; border:1px solid #ccc; padding:0 4px; border-radius:3px;">⊕</span> yang muncul di bilah alamat URL browser Anda.</p>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" id="closeInstallModalFootBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Isolasi Data (Aplikasi vs Browser) -->
+  <div class="overlay" id="storageEnvModalOverlay">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-head">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🛡️</span> Isolasi Data & Keamanan Anti-Hapus
+        </h2>
+        <button class="close-btn" id="closeStorageEnvModalBtn">✕</button>
+      </div>
+      <div style="padding:16px 20px; font-size:13.5px; line-height:1.6; color:var(--ink); max-height:calc(85vh - 120px); overflow-y:auto;">
+        <!-- Ruang Aktif -->
+        <div style="display:flex; align-items:center; justify-content:space-between; background:var(--paper); padding:10px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:14px;">
+          <div>
+            <div style="font-size:11.5px; color:var(--ink-soft);">Ruang Penyimpanan Aktif:</div>
+            <div style="font-size:14.5px; font-weight:700; color:var(--moss-dark);" id="envModalActiveName">📱 Mode Aplikasi (Data Terisolasi)</div>
+          </div>
+          <button type="button" class="btn btn-cancel" id="switchEnvBtn" style="padding:6px 12px; font-size:12px;" title="Ganti tampilan ruang data antara browser dan aplikasi">
+            🔀 Ganti Ruang
+          </button>
+        </div>
+
+        <!-- Penjelasan Kenapa Data Bisa Terhapus di PWA Web -->
+        <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px 14px; margin-bottom:12px; font-size:12.5px; color:#9a3412;">
+          <b>⚠️ Kenapa Data PWA Terhapus Saat Bersihkan Data Browser?</b>
+          <p style="margin:4px 0 0 0;">
+            Aplikasi PWA diinstal melalui Chrome, sehingga sistem operasi menganggap datanya berada di bawah wadah penjelajah Chrome. Ketika Anda memilih <i>"Hapus cookie dan data situs"</i> di Chrome, browser secara otomatis menyapu bersih seluruh basis data situs web dan PWA.
+          </p>
+        </div>
+
+        <!-- Solusi 1: Aplikasi Android Asli (APK Mandiri) -->
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px 14px; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+            <div>
+              <b style="color:#166534; font-size:13.5px;">⭐ Solusi Terbaik: Aplikasi Android Asli (.APK)</b>
+              <p style="margin:2px 0 0 0; font-size:12px; color:#14532d;">
+                Berjalan 100% mandiri tanpa browser. Memiliki folder sistem sendiri (<code style="background:rgba(0,0,0,0.06); padding:1px 3px; border-radius:3px;">/data/data/com.catatanpintar.app</code>) yang kebal dan tidak akan pernah terpengaruh pembersihan data Chrome!
+              </p>
+            </div>
+            <button type="button" class="btn btn-save" id="openApkInfoBtn" style="padding:6px 12px; font-size:12px; background:#16a34a; border-color:#15803d;">
+              📱 Dapatkan Berkas APK
+            </button>
+          </div>
+        </div>
+
+        <!-- Solusi 2: Brankas Berkas Fisik Perangkat (Anti-Hapus Browser) -->
+        <div style="background:var(--paper); border:1px solid var(--card-edge); border-radius:10px; padding:12px 14px; margin-bottom:12px;">
+          <b style="font-size:13.5px; color:var(--ink);">📁 Solusi Web/PWA: Brankas Berkas Fisik (Anti-Hapus)</b>
+          <p style="margin:4px 0 8px 0; font-size:12px; color:var(--ink-soft);">
+            Hubungkan catatan langsung ke berkas fisik di memori perangkat Anda (misal folder Dokumen/Unduhan). Karena berkas ini berada di luar wadah browser, membersihkan cookie browser <b>TIDAK AKAN</b> menghapusnya!
+          </p>
+          <div id="vaultStatusBox" style="font-size:12px; padding:8px 10px; background:#faf7ef; border:1px dashed var(--card-edge); border-radius:6px; margin-bottom:8px;">
+            <span id="vaultStatusText">⚪ Belum terhubung ke berkas fisik perangkat.</span>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-cancel" id="linkVaultBtn" style="font-size:12px; padding:6px 12px;">
+              🔗 Hubungkan Berkas Brankas (.json)
+            </button>
+            <button type="button" class="btn btn-cancel" id="restoreVaultBtn" style="font-size:12px; padding:6px 12px;">
+              📂 Buka / Pulihkan dari Berkas
+            </button>
+            <button type="button" class="btn btn-cancel" id="downloadBackupBtn" style="font-size:12px; padding:6px 12px;">
+              💾 Unduh Cadangan Fisik
+            </button>
+          </div>
+        </div>
+
+        <!-- Alat Salin Antar Ruang -->
+        <div style="background:var(--paper); border:1px solid var(--card-edge); border-radius:10px; padding:12px 14px;">
+          <b style="font-size:13px; color:var(--ink);">Alat Sinkronisasi Antar Ruang (Browser ➔ Aplikasi):</b>
+          <p style="font-size:12px; color:var(--ink-soft); margin:2px 0 8px 0;">Salin catatan dari ruang satu ke ruang lainnya jika diperlukan:</p>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button type="button" class="btn btn-cancel" id="copyBrowserToAppBtn" style="width:100%; justify-content:center; padding:7px 12px; font-size:12px; text-align:center;">
+              📥 Salin Semua Catatan dari Browser ➔ ke Aplikasi
+            </button>
+            <button type="button" class="btn btn-cancel" id="copyAppToBrowserBtn" style="width:100%; justify-content:center; padding:7px 12px; font-size:12px; text-align:center;">
+              📤 Salin Semua Catatan dari Aplikasi ➔ ke Browser
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-save" id="closeStorageEnvModalFootBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Unduh & Panduan Aplikasi Android Mandiri (APK) -->
+  <div class="overlay" id="apkModalOverlay">
+    <div class="modal" style="max-width:540px;">
+      <div class="modal-head">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">📱</span> Aplikasi Android Mandiri (APK)
+        </h2>
+        <button class="close-btn" id="closeApkModalBtn">✕</button>
+      </div>
+      <div style="padding:16px 20px; font-size:13.5px; line-height:1.6; color:var(--ink); max-height:calc(85vh - 120px); overflow-y:auto;">
+        <div style="background:#eef5eb; border:1px solid #cce5c4; border-radius:10px; padding:12px 14px; margin-bottom:14px; color:#2d4e24;">
+          <b>🛡️ Benar-Benar Berdiri Sendiri 100% Tanpa Browser:</b>
+          <p style="margin:4px 0 0 0; font-size:12.5px;">
+            Aplikasi APK terpasang sebagai aplikasi Android murni (<code style="background:rgba(0,0,0,0.06); padding:1px 4px; border-radius:3px;">com.catatanpintar.app</code>). Sistem operasi Android mengisolasinya secara penuh. Anda dapat membersihkan cache browser Chrome kapan saja tanpa takut data catatan Anda terhapus!
+          </p>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <b style="font-size:14px; color:var(--moss-dark);">Langkah Mendapatkan & Memasang APK:</b>
+          <ol style="margin:8px 0 0 18px; padding:0; font-size:13px; line-height:1.7;">
+            <li>
+              <b>Melalui GitHub Actions (Otomatis):</b><br>
+              Setiap kali proyek diperbarui di repositori GitHub, alur kerja otomatis <i>Build Android APK</i> akan menghasilkan berkas <code style="background:rgba(0,0,0,0.06); padding:1px 4px; border-radius:3px;">app-debug.apk</code> yang dapat langsung diunduh di tab <b>Actions</b> repositori GitHub Anda.
+            </li>
+            <li>
+              <b>Melalui Komputer (Android Studio / Gradle):</b><br>
+              Jalankan perintah berikut di folder proyek:
+              <pre style="background:#1f2937; color:#f9fafb; padding:10px; border-radius:6px; font-size:11.5px; overflow-x:auto; margin:6px 0;">npx cap sync android
+cd android
+./gradlew assembleDebug</pre>
+              Berkas APK akan langsung jadi di: <br><code style="font-size:11px; background:rgba(0,0,0,0.06); padding:2px 4px;">android/app/build/outputs/apk/debug/app-debug.apk</code>
+            </li>
+            <li>
+              <b>Pasang di HP Android:</b><br>
+              Kirim berkas APK tersebut ke HP Anda (lewat WhatsApp, Drive, atau kabel data), lalu ketuk berkas tersebut untuk memasangnya.
+            </li>
+          </ol>
+        </div>
+
+        <div style="background:var(--paper); border:1px solid var(--card-edge); border-radius:10px; padding:12px 14px; font-size:12.5px;">
+          <b>💡 Tips untuk Versi Web/PWA Saat Ini:</b>
+          <p style="margin:4px 0 0 0; color:var(--ink-soft);">
+            Sambil menyiapkan APK, Anda dapat mengaktifkan <b>Brankas Berkas Fisik</b> di menu isolasi data, atau secara teratur mengklik <b>"Unduh Cadangan Fisik"</b> agar salinan catatan selalu aman di memori perangkat Anda.
+          </p>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-save" id="closeApkModalFootBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Indikator Offline -->
+  <div id="offlineIndicator" style="display:none; position:fixed; bottom:16px; left:16px; z-index:9999; background:#c27d1a; color:#fff; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.25); align-items:center; gap:8px;">
+    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#fff;"></span>
+    Mode Offline — Data tersimpan aman di perangkat.
   </div>
 
   <!-- Toast Notification Container -->

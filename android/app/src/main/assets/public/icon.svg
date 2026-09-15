@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="mossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4e6345"/>
+      <stop offset="100%" stop-color="#2d3926"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4aa3b"/>
+      <stop offset="100%" stop-color="#9e7b23"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="512" height="512" rx="112" fill="url(#mossGrad)"/>
+
+  <!-- Inner Note Book Layer -->
+  <g filter="url(#shadow)">
+    <!-- Book Spine / Cover Shadow -->
+    <rect x="96" y="80" width="320" height="352" rx="28" fill="#1f271a"/>
+    <!-- Main Book Cover -->
+    <rect x="106" y="80" width="310" height="352" rx="24" fill="#faf7ef"/>
+    
+    <!-- Spine binding accents -->
+    <rect x="106" y="80" width="36" height="352" rx="6" fill="#37452f"/>
+    <line x1="142" y1="80" x2="142" y2="432" stroke="#d8d0bb" stroke-width="3"/>
+    
+    <!-- Decorative Notebook lines -->
+    <rect x="170" y="140" width="210" height="14" rx="7" fill="#b8922f" opacity="0.9"/>
+    <rect x="170" y="180" width="160" height="10" rx="5" fill="#6b6858" opacity="0.4"/>
+    <rect x="170" y="215" width="200" height="10" rx="5" fill="#6b6858" opacity="0.4"/>
+    <rect x="170" y="250" width="180" height="10" rx="5" fill="#6b6858" opacity="0.4"/>
+    <rect x="170" y="285" width="130" height="10" rx="5" fill="#6b6858" opacity="0.4"/>
+
+    <!-- Gold Bookmark Ribbon -->
+    <path d="M220 80 L220 200 L242 180 L264 200 L264 80 Z" fill="url(#goldGrad)"/>
+    
+    <!-- Smart Offline Emblem / Pen badge in bottom right -->
+    <circle cx="340" cy="350" r="46" fill="#47593f" filter="url(#shadow)"/>
+    <!-- Pencil / Pen Icon -->
+    <path d="M330 366 L324 372 L320 354 Z" fill="#faf7ef"/>
+    <path d="M324 350 L346 328 C349 325 354 325 357 328 L362 333 C365 336 365 341 362 344 L340 366 Z" fill="#d4aa3b"/>
+    <line x1="334" y1="340" x2="352" y2="358" stroke="#1f271a" stroke-width="2"/>
+  </g>
+</svg>

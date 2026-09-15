@@ -1,0 +1,38 @@
+{
+  "id": "./",
+  "name": "Catatan Pintar — Offline",
+  "short_name": "Catatan",
+  "description": "Catatan pintar offline: tulis catatan, kelola keuangan, dan lampirkan file langsung di perangkat Anda.",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#47593f",
+  "background_color": "#e9e3d5",
+  "categories": ["productivity", "utilities", "finance"],
+  "icons": [
+    {
+      "src": "./pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

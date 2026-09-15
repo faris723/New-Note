@@ -28,6 +28,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.2.1
+
       - name: Install Dependencies
         run: npm ci || npm install
 
@@ -37,17 +42,22 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Make Gradle Executable
-        run: chmod +x ./android/gradlew
+      - name: Ensure Gradle Wrapper Exists
+        run: |
+          cd android
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.2.1
+          fi
+          chmod +x gradlew
 
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Upload APK Artifact
+      - name: Find and Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CatatanPintar-Standalone-App
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
