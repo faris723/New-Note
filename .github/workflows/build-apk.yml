@@ -40,15 +40,20 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Fix Missing settings.gradle
+      # PERBAIKAN BARU: Membuat gradle.properties dan settings.gradle yang hilang
+      - name: Fix Missing Android Configuration Files
         working-directory: ./android
         run: |
+          # 1. Mengizinkan penggunaan AndroidX
+          echo "android.useAndroidX=true" > gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          
+          # 2. Mengenalkan modul Capacitor
           echo "include ':app'" > settings.gradle
           echo "include ':capacitor-cordova-android-plugins'" >> settings.gradle
           echo "project(':capacitor-cordova-android-plugins').projectDir = new File(rootProject.projectDir, 'capacitor-cordova-android-plugins')" >> settings.gradle
           echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
 
-      # PERBAIKAN BARU: Memaksa versi AndroidX agar tidak bentrok
       - name: Fix AndroidX Version Conflict
         working-directory: ./android/app
         run: |
