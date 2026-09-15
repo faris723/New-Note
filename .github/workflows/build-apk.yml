@@ -1,10 +1,10 @@
 name: Build Android APK (Aplikasi Mandiri Tanpa Browser)
 
 on:
-  workflow_dispatch: # Mengizinkan Anda menekan tombol "Run workflow" secara manual
+  workflow_dispatch:
   push:
     branches:
-      - main # Akan otomatis jalan jika ada push ke branch main
+      - main
 
 jobs:
   build-android:
@@ -15,11 +15,11 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # 1. Setup Node.js dan Bun (Karena proyek Anda menggunakan bun.lock)
+      # 1. Setup Node.js ke versi 22 (Sesuai permintaan Capacitor)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -33,27 +33,27 @@ jobs:
       - name: Build Web App
         run: bun run build
 
-      # 3. Sinkronisasi Web App ke folder Android (Capacitor)
+      # 3. Sinkronisasi Web App ke folder Android
       - name: Sync Capacitor Android
-        run: npx cap sync android
+        run: bunx cap sync android
 
-      # 4. Setup Java 17 (Wajib untuk Capacitor 5/6 dan Android)
+      # 4. Setup Java 17 (Wajib untuk Capacitor Android)
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 5. Memberikan izin eksekusi agar Gradle tidak "Permission Denied"
-      - name: Grant Execute Permission for Gradle
-        run: chmod +x android/gradlew
+      # 5. Setup Gradle Resmi (Mencegah error file gradlew tidak ditemukan)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      # 6. Melakukan Build APK
+      # 6. Melakukan Build APK 
       - name: Build Android APK
         working-directory: ./android
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
-      # 7. Mengunggah hasil APK agar bisa di-download di GitHub Actions
+      # 7. Mengunggah hasil APK ke GitHub Actions
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
