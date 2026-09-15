@@ -39,6 +39,15 @@ const Filesystem = (typeof window !== 'undefined' && window.Capacitor?.Plugins?.
     };
 
 import { AttachmentService } from './attachment.js';
+import {
+  isFileSystemAccessSupported,
+  linkDeviceVaultFile,
+  openDeviceVaultFile,
+  writeToDeviceVault,
+  hasActiveFileHandle,
+  getActiveFileName,
+  unlinkDeviceVault
+} from './device_file.js';
 
 export const CORE_CATEGORIES = [
   { id: 'pekerjaan', name: 'Pekerjaan', color: '#3d5a6b', icon: '💼', core: true, keywords: ['rapat', 'meeting', 'proyek', 'deadline', 'kantor', 'klien', 'tugas kantor', 'laporan', 'presentasi'] },
@@ -207,6 +216,13 @@ export async function saveDataToDevice(data) {
 
     // Mirror to active environment's isolated IndexedDB
     await syncToIndexedDB(payload.notes, payload.categories);
+
+    // Also persist directly to physical device file (immune to browser cookie/cache clearance)
+    try {
+      await writeToDeviceVault(payload);
+    } catch (vaultErr) {
+      console.warn('Device physical vault write notice:', vaultErr);
+    }
 
     return { success: true, native: Capacitor.isNativePlatform() };
   } catch (error) {
@@ -534,6 +550,15 @@ export const StorageService = {
   getStorageConfig,
   setStorageEnvironment,
   requestPersistentStorage,
+
+  // Device File Vault (Anti-Browser-Clear Physical Persistence)
+  isFileSystemAccessSupported,
+  linkDeviceVaultFile,
+  openDeviceVaultFile,
+  writeToDeviceVault,
+  hasActiveFileHandle,
+  getActiveFileName,
+  unlinkDeviceVault,
 
   /**
    * Migrate legacy unpartitioned data into the active isolated database on first launch.

@@ -40,6 +40,9 @@ function cacheElements() {
     'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
     'envBadgeBtn', 'envBadgeIcon', 'envBadgeText',
     'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
+    'browserWipedRecoveryBanner', 'quickRestoreVaultBtn', 'dismissRecoveryBannerBtn',
+    'openApkInfoBtn', 'apkModalOverlay', 'closeApkModalBtn', 'closeApkModalFootBtn',
+    'vaultStatusBox', 'vaultStatusText', 'linkVaultBtn', 'restoreVaultBtn', 'downloadBackupBtn',
     'searchInput', 'searchClearBtn',
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
     'chipsRow', 'notesList', 'emptyState', 'fabChat', 'fabAdd',
@@ -1624,6 +1627,104 @@ function bindEventListeners() {
       }
     };
   }
+
+  // APK Standalone Modal
+  if (el.openApkInfoBtn) {
+    el.openApkInfoBtn.onclick = () => {
+      if (el.apkModalOverlay) el.apkModalOverlay.classList.add('open');
+    };
+  }
+  if (el.closeApkModalBtn) {
+    el.closeApkModalBtn.onclick = () => {
+      if (el.apkModalOverlay) el.apkModalOverlay.classList.remove('open');
+    };
+  }
+  if (el.closeApkModalFootBtn) {
+    el.closeApkModalFootBtn.onclick = () => {
+      if (el.apkModalOverlay) el.apkModalOverlay.classList.remove('open');
+    };
+  }
+
+  // Real Device Vault Handlers (Anti-Browser Wipe)
+  const updateVaultStatusUI = () => {
+    if (!el.vaultStatusText) return;
+    if (StorageService.hasActiveFileHandle()) {
+      const fileName = StorageService.getActiveFileName() || 'catatan_pintar_vault.json';
+      el.vaultStatusText.innerHTML = `<b style="color:#15803d;">🟢 Terhubung ke Berkas Fisik:</b> <code>${fileName}</code> (Catatan kebal pembersihan browser)`;
+    } else {
+      el.vaultStatusText.innerHTML = '⚪ Belum terhubung ke berkas fisik perangkat.';
+    }
+  };
+
+  if (el.linkVaultBtn) {
+    el.linkVaultBtn.onclick = async () => {
+      try {
+        UIService.showToast('Membuka pemilih berkas perangkat…', 'info');
+        const res = await StorageService.linkDeviceVaultFile();
+        if (res.success) {
+          await StorageService.saveNotes(notes, categories);
+          updateVaultStatusUI();
+          UIService.showToast(`Berhasil menghubungkan berkas "${res.name}". Catatan Anda kini otomatis disimpan ke memori fisik HP/Laptop!`, 'info');
+        }
+      } catch (err) {
+        alert(err.message || 'Gagal menghubungkan berkas perangkat.');
+      }
+    };
+  }
+
+  const handleRestoreFromVault = async () => {
+    try {
+      UIService.showToast('Membuka berkas brankas…', 'info');
+      const res = await StorageService.openDeviceVaultFile();
+      if (res && res.success && res.data) {
+        const importedNotes = res.data.notes || [];
+        const importedCats = res.data.categories || [];
+        if (Array.isArray(importedNotes) && importedNotes.length > 0) {
+          notes = importedNotes;
+          if (Array.isArray(importedCats) && importedCats.length > 0) {
+            categories = importedCats;
+          }
+          await StorageService.saveNotes(notes, categories);
+          populateCategorySelect();
+          renderCategoryChips();
+          renderNotesList();
+          await UIService.updateStorageMeter();
+          updateVaultStatusUI();
+          if (el.browserWipedRecoveryBanner) el.browserWipedRecoveryBanner.style.display = 'none';
+          UIService.showToast(`Berhasil memulihkan ${notes.length} catatan dari berkas "${res.fileName}"!`, 'info');
+        } else {
+          UIService.showToast('Berkas brankas dibuka, namun tidak ada data catatan di dalamnya.', 'warning');
+        }
+      }
+    } catch (err) {
+      alert(err.message || 'Gagal membuka berkas brankas.');
+    }
+  };
+
+  if (el.restoreVaultBtn) {
+    el.restoreVaultBtn.onclick = handleRestoreFromVault;
+  }
+  if (el.quickRestoreVaultBtn) {
+    el.quickRestoreVaultBtn.onclick = handleRestoreFromVault;
+  }
+
+  if (el.dismissRecoveryBannerBtn) {
+    el.dismissRecoveryBannerBtn.onclick = () => {
+      if (el.browserWipedRecoveryBanner) el.browserWipedRecoveryBanner.style.display = 'none';
+    };
+  }
+
+  if (el.downloadBackupBtn) {
+    el.downloadBackupBtn.onclick = async () => {
+      try {
+        UIService.showToast('Menyiapkan berkas cadangan fisik…', 'info');
+        await ExportImportService.exportNotes(notes, categories, 'json');
+        UIService.showToast('Cadangan fisik berhasil diunduh ke folder perangkat Anda!', 'info');
+      } catch (err) {
+        UIService.showToast('Gagal mengunduh cadangan: ' + err.message, 'danger');
+      }
+    };
+  }
 }
 
 function renderCategoryManagerList() {
@@ -1730,6 +1831,18 @@ async function init() {
     renderCategoryChips();
     renderNotesList();
     await UIService.updateStorageMeter();
+
+    // Disaster Recovery Detection (e.g. user cleared browser cookies and site data)
+    if (notes.length > 0) {
+      try { sessionStorage.setItem('cp_had_data', 'true'); } catch (e) {}
+    } else {
+      try {
+        const hadData = sessionStorage.getItem('cp_had_data');
+        if (hadData === 'true' && el.browserWipedRecoveryBanner) {
+          el.browserWipedRecoveryBanner.style.display = 'block';
+        }
+      } catch (e) {}
+    }
   } catch (uiErr) {
     console.warn('UI render notice:', uiErr);
   }
