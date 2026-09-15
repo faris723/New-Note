@@ -40,11 +40,13 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # PERBAIKAN BARU: Membuat file settings.gradle yang hilang
+      # PERBAIKAN FINAL: Membuat settings.gradle yang mendaftarkan SEMUA modul Capacitor
       - name: Fix Missing settings.gradle
         working-directory: ./android
         run: |
           echo "include ':app'" > settings.gradle
+          echo "include ':capacitor-cordova-android-plugins'" >> settings.gradle
+          echo "project(':capacitor-cordova-android-plugins').projectDir = new File(rootProject.projectDir, 'capacitor-cordova-android-plugins')" >> settings.gradle
           echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
 
       - name: Generate Gradle Wrapper
