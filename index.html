@@ -13,6 +13,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Catatan Pintar">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -130,6 +133,17 @@
     .icon-btn.active-mode:hover {
       background: var(--moss-dark);
       border-color: var(--moss-dark);
+      color: #fff;
+    }
+    #installAppBtn {
+      background: var(--moss);
+      color: #faf7ef;
+      border-color: var(--moss-dark);
+      font-weight: 600;
+      box-shadow: 0 2px 5px rgba(71,89,63,0.3);
+    }
+    #installAppBtn:hover {
+      background: var(--moss-dark);
       color: #fff;
     }
     #financeBtn:hover {
@@ -1921,6 +1935,7 @@
     <header>
       <h1>Catatan Pintar</h1>
       <div class="head-actions">
+        <button class="icon-btn" id="installAppBtn" title="Pasang Catatan Pintar sebagai aplikasi">📲 Pasang Aplikasi</button>
         <button class="icon-btn" id="financeBtn">💰 Keuangan</button>
         <button class="icon-btn" id="manageCatBtn">🏷️ Kategori</button>
         <button class="icon-btn" id="filterToggleBtn">🔍 Filter</button>
@@ -2369,6 +2384,58 @@
       </div>
       <div class="viewer-body" id="viewerBody"></div>
     </div>
+  </div>
+
+  <!-- Modal Panduan Pasang Aplikasi (PWA) -->
+  <div class="overlay" id="installModalOverlay">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-head">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">📲</span> Pasang Catatan Pintar
+        </h2>
+        <button class="close-btn" id="closeInstallModalBtn">✕</button>
+      </div>
+      <div style="padding:16px 20px; font-size:14px; line-height:1.6; color:var(--ink);">
+        <p style="margin-bottom:12px;">Pasang aplikasi ini di ponsel atau komputer Anda agar dapat dibuka langsung dari layar utama tanpa browser dan dapat digunakan secara 100% offline.</p>
+        
+        <div id="installPromptActionWrap" style="margin-bottom:16px; text-align:center;">
+          <button class="btn btn-save" id="doInstallPromptBtn" style="padding:10px 24px; font-size:15px; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+            <span>📲</span> Pasang Aplikasi Sekarang
+          </button>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:12px;">
+          <b style="color:var(--moss-dark);">📱 Di HP Android (Chrome / Edge):</b>
+          <ol style="margin:6px 0 0 18px; padding:0; font-size:13px;">
+            <li>Tekan tombol hijau <b>Pasang Aplikasi Sekarang</b> di atas, ATAU</li>
+            <li>Tekan menu titik tiga (⋮) di pojok kanan atas browser, lalu pilih <b>"Instal aplikasi"</b> atau <b>"Tambahkan ke Layar Utama"</b>.</li>
+          </ol>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge); margin-bottom:12px;">
+          <b style="color:var(--slate);">🍎 Di iPhone / iPad (Safari):</b>
+          <ol style="margin:6px 0 0 18px; padding:0; font-size:13px;">
+            <li>Buka situs ini di browser <b>Safari</b>.</li>
+            <li>Tekan tombol <b>Bagikan (Share)</b> <span style="font-size:14px;">📤</span> di bilah bawah layar.</li>
+            <li>Gulir ke bawah dan pilih <b>"Tambah ke Layar Utama" (Add to Home Screen)</b>.</li>
+          </ol>
+        </div>
+
+        <div style="background:var(--paper); padding:12px 14px; border-radius:10px; border:1px solid var(--card-edge);">
+          <b style="color:var(--gold);">💻 Di Laptop / Komputer (Chrome / Edge):</b>
+          <p style="margin:4px 0 0 0; font-size:13px;">Klik ikon pasang aplikasi <span style="display:inline-block; border:1px solid #ccc; padding:0 4px; border-radius:3px;">⊕</span> yang muncul di bilah alamat URL browser Anda.</p>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" id="closeInstallModalFootBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Indikator Offline -->
+  <div id="offlineIndicator" style="display:none; position:fixed; bottom:16px; left:16px; z-index:9999; background:#c27d1a; color:#fff; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.25); align-items:center; gap:8px;">
+    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#fff;"></span>
+    Mode Offline — Data tersimpan aman di perangkat.
   </div>
 
   <!-- Toast Notification Container -->

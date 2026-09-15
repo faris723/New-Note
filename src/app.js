@@ -13,6 +13,7 @@ import { FinanceService } from './modules/finance.js';
 import { ExportImportService } from './modules/exportImport.js';
 import { AssistantService } from './modules/assistant.js';
 import { EditorService } from './modules/editor.js';
+import { PWAService } from './modules/pwa.js';
 
 // Application State
 let notes = [];
@@ -35,6 +36,7 @@ const el = {};
 function cacheElements() {
   const ids = [
     'financeBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
+    'installAppBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
     'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
     'searchInput', 'searchClearBtn',
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
@@ -1632,6 +1634,20 @@ async function init() {
     await UIService.updateStorageMeter();
   } catch (uiErr) {
     console.warn('UI render notice:', uiErr);
+  }
+
+  // Initialize Progressive Web App (PWA) Install & Connectivity Service
+  try {
+    PWAService.init({
+      installAppBtn: el.installAppBtn,
+      installModalOverlay: el.installModalOverlay,
+      closeInstallModalBtn: el.closeInstallModalBtn,
+      closeInstallModalFootBtn: el.closeInstallModalFootBtn,
+      doInstallPromptBtn: el.doInstallPromptBtn,
+      offlineIndicator: el.offlineIndicator
+    });
+  } catch (pwaErr) {
+    console.warn('PWAService init notice:', pwaErr);
   }
 
   // Start Reminder Background Checker
