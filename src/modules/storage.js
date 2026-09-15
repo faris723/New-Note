@@ -7,8 +7,37 @@
  * into separate physical files in 'attachments/' to maintain optimal JSON performance.
  */
 
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core';
+// Native Capacitor & Capacitor Filesystem resolver
+// Supports Android native apps (via window.Capacitor),
+// Vite bundler environments, and direct static browser hosting (e.g. GitHub Pages)
+const Capacitor = (typeof window !== 'undefined' && window.Capacitor) ? window.Capacitor : {
+  isNativePlatform: () => false,
+  convertFileSrc: (uri) => uri
+};
+
+const Directory = {
+  Documents: 'DOCUMENTS',
+  Data: 'DATA',
+  Cache: 'CACHE',
+  External: 'EXTERNAL',
+  ExternalStorage: 'EXTERNAL_STORAGE'
+};
+
+const Encoding = {
+  UTF8: 'utf8',
+  ASCII: 'ascii',
+  UTF16: 'utf16'
+};
+
+const Filesystem = (typeof window !== 'undefined' && window.Capacitor?.Plugins?.Filesystem)
+  ? window.Capacitor.Plugins.Filesystem
+  : {
+      writeFile: async () => { throw new Error('Filesystem using IndexedDB fallback on web'); },
+      readFile: async () => { throw new Error('Filesystem using IndexedDB fallback on web'); },
+      getUri: async ({ path }) => ({ uri: path }),
+      deleteFile: async () => {}
+    };
+
 import { AttachmentService } from './attachment.js';
 
 export const DATA_FILE_NAME = 'catatan_data.json';

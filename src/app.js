@@ -1606,34 +1606,52 @@ async function init() {
   bindEventListeners();
 
   // Initialize Canvas Sketch Service
-  if (el.sketchCanvas) {
-    SketchService.init(el.sketchCanvas);
+  try {
+    if (el.sketchCanvas) {
+      SketchService.init(el.sketchCanvas);
+    }
+  } catch (e) {
+    console.warn('SketchService init notice:', e);
   }
 
-  // Load Categories & Notes from IndexedDB
-  categories = await StorageService.loadCategories();
-  await StorageService.autoMigrateLegacyData();
-  notes = await StorageService.loadNotes();
+  // Load Categories & Notes from Storage / IndexedDB
+  try {
+    categories = await StorageService.loadCategories();
+    await StorageService.autoMigrateLegacyData();
+    notes = await StorageService.loadNotes();
+  } catch (storageErr) {
+    console.warn('StorageService load notice:', storageErr);
+    categories = CORE_CATEGORIES;
+    notes = [];
+  }
 
-  populateCategorySelect();
-  renderCategoryChips();
-  renderNotesList();
-  await UIService.updateStorageMeter();
+  try {
+    populateCategorySelect();
+    renderCategoryChips();
+    renderNotesList();
+    await UIService.updateStorageMeter();
+  } catch (uiErr) {
+    console.warn('UI render notice:', uiErr);
+  }
 
   // Start Reminder Background Checker
-  ReminderService.startReminderChecker(
-    () => notes,
-    async (triggeredNote) => {
-      ReminderService.activeAlertNote = triggeredNote;
-      el.reminderAlertTitle.textContent = triggeredNote.title || 'Catatan';
-      el.reminderAlertBody.textContent = SecurityService.stripHtml(triggeredNote.bodyHTML || '');
-      el.reminderAlertOverlay.classList.add('open');
+  try {
+    ReminderService.startReminderChecker(
+      () => notes,
+      async (triggeredNote) => {
+        ReminderService.activeAlertNote = triggeredNote;
+        if (el.reminderAlertTitle) el.reminderAlertTitle.textContent = triggeredNote.title || 'Catatan';
+        if (el.reminderAlertBody) el.reminderAlertBody.textContent = SecurityService.stripHtml(triggeredNote.bodyHTML || '');
+        if (el.reminderAlertOverlay) el.reminderAlertOverlay.classList.add('open');
 
-      // Update storage
-      await StorageService.saveNote(triggeredNote);
-      renderNotesList();
-    }
-  );
+        // Update storage
+        await StorageService.saveNote(triggeredNote);
+        renderNotesList();
+      }
+    );
+  } catch (remErr) {
+    console.warn('ReminderService notice:', remErr);
+  }
 }
 
 // Boot up once DOM is ready
