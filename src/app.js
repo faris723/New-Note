@@ -14,6 +14,8 @@ import { ExportImportService } from './modules/exportImport.js';
 import { AssistantService } from './modules/assistant.js';
 import { EditorService } from './modules/editor.js';
 import { PWAService } from './modules/pwa.js';
+import { UpdateService } from './modules/update.js';
+import { APP_VERSION } from './version.js';
 
 // Application State
 let notes = [];
@@ -42,6 +44,7 @@ function cacheElements() {
     'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
     'browserWipedRecoveryBanner', 'quickRestoreVaultBtn', 'dismissRecoveryBannerBtn',
     'openApkInfoBtn', 'apkModalOverlay', 'closeApkModalBtn', 'closeApkModalFootBtn',
+    'updateModalOverlay', 'closeUpdateModalBtn', 'closeUpdateModalLaterBtn', 'updateModalBody', 'updateDownloadBtn', 'updateVersionText',
     'vaultStatusBox', 'vaultStatusText', 'linkVaultBtn', 'restoreVaultBtn', 'downloadBackupBtn',
     'searchInput', 'searchClearBtn',
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
@@ -1859,6 +1862,23 @@ async function init() {
     });
   } catch (pwaErr) {
     console.warn('PWAService init notice:', pwaErr);
+  }
+
+  // Cek Pembaruan Aplikasi (hanya aktif di dalam APK terpasang)
+  try {
+    UpdateService.init(
+      {
+        updateModalOverlay: el.updateModalOverlay,
+        closeUpdateModalBtn: el.closeUpdateModalBtn,
+        closeUpdateModalLaterBtn: el.closeUpdateModalLaterBtn,
+        updateModalBody: el.updateModalBody,
+        updateDownloadBtn: el.updateDownloadBtn,
+        updateVersionText: el.updateVersionText
+      },
+      APP_VERSION
+    );
+  } catch (updErr) {
+    console.warn('UpdateService init notice:', updErr);
   }
 
   // Start Reminder Background Checker
