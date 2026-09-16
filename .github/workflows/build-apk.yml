@@ -18,15 +18,15 @@ jobs:
 
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
@@ -40,7 +40,7 @@ jobs:
         run: bunx cap sync android
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: '21'
@@ -76,7 +76,7 @@ jobs:
       #    AGP sudah dihapus di Gradle 9.6+. Jadi kita pin versi Gradle
       #    dulu sebelum generate wrapper.)
       - name: Setup Compatible Gradle Version
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
@@ -92,7 +92,7 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CatatanPintar-app-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -103,7 +103,7 @@ jobs:
       #    (lihat src/modules/update.js).
       - name: Create GitHub Release with APK
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: android/app/build/outputs/apk/debug/app-debug.apk
           generate_release_notes: true
