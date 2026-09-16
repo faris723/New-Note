@@ -50,6 +50,17 @@ function sanitizeFileName(name) {
 }
 
 /**
+ * Cari nama kategori (dipakai sebagai nama folder) dari id kategori.
+ * Menggabungkan kategori inti (CORE_CATEGORIES) + kategori kustom pengguna.
+ */
+function resolveCategoryFolderName(categoryId, customCategories = []) {
+  const all = [...CORE_CATEGORIES, ...(Array.isArray(customCategories) ? customCategories : [])];
+  const found = all.find((c) => c.id === categoryId);
+  const label = found ? found.name : (categoryId || 'Lainnya');
+  return sanitizeFileName(label);
+}
+
+/**
  * Baca daftar pemetaan noteId -> namaBerkas.cnote yang tersimpan sebelumnya,
  * supaya kalau judul catatan berubah, berkas lama dengan nama sebelumnya
  * bisa dihapus (tidak menumpuk berkas usang).
@@ -90,29 +101,32 @@ async function saveNotesManifest(manifest) {
  * Lampiran foto/audio/sketsa TETAP disimpan terpisah di folder attachments/
  * seperti sebelumnya, supaya berkas .cnote tetap ringan & mudah dibaca.
  */
-export async function syncIndividualNoteFiles(notes = []) {
+export async function syncIndividualNoteFiles(notes = [], customCategories = []) {
   if (!Capacitor.isNativePlatform()) return; // fitur khusus APK, tidak berlaku di web
 
   try {
-    const manifest = await loadNotesManifest();
+    const manifest = await loadNotesManifest(); // noteId -> "NamaKategori/Judul (id).cnote"
     const stillExistingIds = new Set();
 
     for (const note of notes) {
       if (!note || !note.id) continue;
       stillExistingIds.add(note.id);
 
+      const folderName = resolveCategoryFolderName(note.category, customCategories);
       const baseTitle = sanitizeFileName(note.title);
       const shortId = String(note.id).slice(-6);
       const fileName = `${baseTitle} (${shortId})${NOTE_FILE_EXTENSION}`;
-      const filePath = `${NOTES_SUBFOLDER}/${fileName}`;
+      const relativePath = `${folderName}/${fileName}`;
+      const filePath = `${NOTES_SUBFOLDER}/${relativePath}`;
 
-      // Kalau judul berubah dari sebelumnya, nama berkas juga berubah —
-      // hapus dulu berkas lama supaya tidak ada berkas duplikat/usang.
-      const previousFileName = manifest[note.id];
-      if (previousFileName && previousFileName !== fileName) {
+      // Kalau judul ATAU kategori berubah dari sebelumnya, path berkas juga
+      // berubah — hapus dulu berkas lama (di folder kategori lama) supaya
+      // tidak ada berkas duplikat/usang yang menumpuk.
+      const previousRelativePath = manifest[note.id];
+      if (previousRelativePath && previousRelativePath !== relativePath) {
         try {
           await Filesystem.deleteFile({
-            path: `${NOTES_SUBFOLDER}/${previousFileName}`,
+            path: `${NOTES_SUBFOLDER}/${previousRelativePath}`,
             directory: Directory.External
           });
         } catch (delErr) {
@@ -142,7 +156,7 @@ export async function syncIndividualNoteFiles(notes = []) {
         recursive: true
       });
 
-      manifest[note.id] = fileName;
+      manifest[note.id] = relativePath;
     }
 
     // Hapus berkas .cnote untuk catatan yang sudah dihapus dari aplikasi
@@ -351,9 +365,10 @@ export async function saveDataToDevice(data) {
       // Running on web fallback (IndexedDB)
     }
 
-    // Tulis juga setiap catatan sebagai berkas .cnote terpisah di folder Catatan/
+    // Tulis juga setiap catatan sebagai berkas .cnote terpisah,
+    // dikelompokkan ke dalam folder per-kategori di dalam Catatan/
     try {
-      await syncIndividualNoteFiles(payload.notes);
+      await syncIndividualNoteFiles(payload.notes, payload.categories);
     } catch (perNoteErr) {
       console.warn('syncIndividualNoteFiles warning:', perNoteErr);
     }
