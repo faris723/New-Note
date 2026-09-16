@@ -176,10 +176,19 @@ export const ExportImportService = {
       const jsonContent = await backupJsonFile.async('string');
       return this.validateAndSanitizeParsedData(JSON.parse(jsonContent));
     } else {
-      // Plain JSON file
+      // Berkas JSON biasa, atau berkas catatan tunggal .cnote
       const text = await file.text();
-      return this.validateAndSanitizeParsedData(JSON.parse(text));
+      return this.parseBackupText(text);
     }
+  },
+
+  /**
+   * Sama seperti parseBackupFile, tapi menerima string JSON mentah secara
+   * langsung (dipakai saat membuka berkas .cnote dari luar aplikasi, misal
+   * lewat tap file di file manager).
+   */
+  parseBackupText(text) {
+    return this.validateAndSanitizeParsedData(JSON.parse(text));
   },
 
   /**
@@ -195,6 +204,10 @@ export const ExportImportService = {
       rawNotes = data.notes;
     } else if (Array.isArray(data)) {
       rawNotes = data;
+    } else if (data.id && (data.bodyHTML !== undefined || data.title !== undefined)) {
+      // Berkas catatan tunggal (.cnote) hasil ekspor per-catatan —
+      // bungkus jadi array 1 catatan supaya bisa lewat alur impor yang sama.
+      rawNotes = [data];
     } else {
       throw new Error('Berkas tidak berisi daftar catatan yang valid.');
     }

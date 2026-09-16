@@ -31,6 +31,141 @@ const Encoding = {
   UTF16: 'utf16'
 };
 
+// --- Konfigurasi Berkas Per-Catatan (.cnote) ---
+// Setiap catatan disimpan sebagai berkas individual di folder "Catatan/"
+// (di dalam Directory.External), agar terlihat & bisa dibuka satu per satu
+// lewat file manager, dan bisa dibuka kembali oleh aplikasi ini.
+const NOTES_SUBFOLDER = 'Catatan';
+const NOTE_FILE_EXTENSION = '.cnote';
+const NOTES_MANIFEST_FILE = `${NOTES_SUBFOLDER}/.manifest.json`;
+
+/** Bersihkan judul catatan supaya aman dipakai sebagai nama berkas */
+function sanitizeFileName(name) {
+  const cleaned = String(name || 'Tanpa Judul')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 60);
+  return cleaned || 'Tanpa Judul';
+}
+
+/**
+ * Baca daftar pemetaan noteId -> namaBerkas.cnote yang tersimpan sebelumnya,
+ * supaya kalau judul catatan berubah, berkas lama dengan nama sebelumnya
+ * bisa dihapus (tidak menumpuk berkas usang).
+ */
+async function loadNotesManifest() {
+  try {
+    const res = await Filesystem.readFile({
+      path: NOTES_MANIFEST_FILE,
+      directory: Directory.External,
+      encoding: Encoding.UTF8
+    });
+    return JSON.parse(res.data) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+async function saveNotesManifest(manifest) {
+  try {
+    await Filesystem.writeFile({
+      path: NOTES_MANIFEST_FILE,
+      data: JSON.stringify(manifest, null, 2),
+      directory: Directory.External,
+      encoding: Encoding.UTF8,
+      recursive: true
+    });
+  } catch (e) {
+    console.warn('Gagal menyimpan manifest berkas per-catatan:', e);
+  }
+}
+
+/**
+ * Menulis SETIAP catatan sebagai berkas individual (.cnote) di folder
+ * "Catatan/" (Directory.External), agar bisa dilihat & dibuka satu per satu
+ * lewat file manager, terpisah dari berkas gabungan (catatan_data_app.json).
+ *
+ * Berkas .cnote hanya khusus untuk isi tulisan (judul, teks, kategori, dsb).
+ * Lampiran foto/audio/sketsa TETAP disimpan terpisah di folder attachments/
+ * seperti sebelumnya, supaya berkas .cnote tetap ringan & mudah dibaca.
+ */
+export async function syncIndividualNoteFiles(notes = []) {
+  if (!Capacitor.isNativePlatform()) return; // fitur khusus APK, tidak berlaku di web
+
+  try {
+    const manifest = await loadNotesManifest();
+    const stillExistingIds = new Set();
+
+    for (const note of notes) {
+      if (!note || !note.id) continue;
+      stillExistingIds.add(note.id);
+
+      const baseTitle = sanitizeFileName(note.title);
+      const shortId = String(note.id).slice(-6);
+      const fileName = `${baseTitle} (${shortId})${NOTE_FILE_EXTENSION}`;
+      const filePath = `${NOTES_SUBFOLDER}/${fileName}`;
+
+      // Kalau judul berubah dari sebelumnya, nama berkas juga berubah —
+      // hapus dulu berkas lama supaya tidak ada berkas duplikat/usang.
+      const previousFileName = manifest[note.id];
+      if (previousFileName && previousFileName !== fileName) {
+        try {
+          await Filesystem.deleteFile({
+            path: `${NOTES_SUBFOLDER}/${previousFileName}`,
+            directory: Directory.External
+          });
+        } catch (delErr) {
+          // Berkas lama mungkin memang sudah tidak ada, abaikan.
+        }
+      }
+
+      const noteExport = {
+        app: 'Catatan Pintar',
+        formatVersion: 1,
+        id: note.id,
+        title: note.title || 'Tanpa Judul',
+        bodyHTML: note.bodyHTML || '',
+        category: note.category || 'pribadi',
+        isPinned: Boolean(note.isPinned),
+        finance: note.finance || null,
+        reminder: note.reminder || null,
+        createdAt: note.createdAt || Date.now(),
+        updatedAt: note.updatedAt || Date.now()
+      };
+
+      await Filesystem.writeFile({
+        path: filePath,
+        data: JSON.stringify(noteExport, null, 2),
+        directory: Directory.External,
+        encoding: Encoding.UTF8,
+        recursive: true
+      });
+
+      manifest[note.id] = fileName;
+    }
+
+    // Hapus berkas .cnote untuk catatan yang sudah dihapus dari aplikasi
+    for (const noteId of Object.keys(manifest)) {
+      if (!stillExistingIds.has(noteId)) {
+        try {
+          await Filesystem.deleteFile({
+            path: `${NOTES_SUBFOLDER}/${manifest[noteId]}`,
+            directory: Directory.External
+          });
+        } catch (e) {
+          // Sudah tidak ada, abaikan.
+        }
+        delete manifest[noteId];
+      }
+    }
+
+    await saveNotesManifest(manifest);
+  } catch (err) {
+    console.warn('syncIndividualNoteFiles warning:', err);
+  }
+}
+
 const Filesystem = (typeof window !== 'undefined' && window.Capacitor?.Plugins?.Filesystem)
   ? window.Capacitor.Plugins.Filesystem
   : {
@@ -214,6 +349,13 @@ export async function saveDataToDevice(data) {
       });
     } catch (fsErr) {
       // Running on web fallback (IndexedDB)
+    }
+
+    // Tulis juga setiap catatan sebagai berkas .cnote terpisah di folder Catatan/
+    try {
+      await syncIndividualNoteFiles(payload.notes);
+    } catch (perNoteErr) {
+      console.warn('syncIndividualNoteFiles warning:', perNoteErr);
     }
 
     // Mirror to active environment's isolated IndexedDB
