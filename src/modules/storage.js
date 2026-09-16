@@ -2,7 +2,9 @@
  * Storage Service & Capacitor Filesystem Architecture
  * Replaces browser localStorage with native Capacitor Filesystem module.
  * Stores core database (notes, categories, finances, debts) in 'catatan_data.json'
- * inside secure internal app directory (Directory.Data).
+ * inside the app's public external folder (Directory.External), so it's visible
+ * and browsable via a normal Android file manager at:
+ * Android/data/<package_id>/files/
  * Offloads multimedia files (audio recordings, canvas sketches, photo attachments)
  * into separate physical files in 'attachments/' to maintain optimal JSON performance.
  */
@@ -167,7 +169,7 @@ export function setStorageEnvironment(env) {
 /**
  * Asynchronous function to save all application data to native device storage
  * using Capacitor Filesystem, storing notes, categories, finances, and debts
- * in a single structured JSON file in Directory.Data.
+ * in a single structured JSON file in Directory.External.
  *
  * @param {Object} data - { notes: Array, categories: Array }
  * @returns {Promise<{success: boolean, native: boolean}>}
@@ -201,12 +203,12 @@ export async function saveDataToDevice(data) {
 
     const jsonString = JSON.stringify(payload, null, 2);
 
-    // Save to Capacitor Filesystem (Directory.Data)
+    // Save to Capacitor Filesystem (Directory.External — visible in file manager)
     try {
       await Filesystem.writeFile({
         path: config.dataFileName,
         data: jsonString,
-        directory: Directory.Data,
+        directory: Directory.External,
         encoding: Encoding.UTF8,
         recursive: true
       });
@@ -233,7 +235,7 @@ export async function saveDataToDevice(data) {
 
 /**
  * Asynchronous function to load all application data from native device storage
- * using Capacitor Filesystem from Directory.Data.
+ * using Capacitor Filesystem from Directory.External (public app folder).
  *
  * @returns {Promise<{categories: Array, notes: Array}>}
  */
@@ -245,7 +247,7 @@ export async function loadDataFromDevice() {
     try {
       const result = await Filesystem.readFile({
         path: config.dataFileName,
-        directory: Directory.Data,
+        directory: Directory.External,
         encoding: Encoding.UTF8
       });
 
@@ -317,18 +319,18 @@ export async function saveMediaAttachmentToFile(att, noteId) {
       const commaIdx = att.dataURL.indexOf(',');
       const base64Data = commaIdx !== -1 ? att.dataURL.substring(commaIdx + 1) : att.dataURL;
 
-      // Write physical file to Directory.Data
+      // Write physical file to Directory.External (public app folder)
       await Filesystem.writeFile({
         path: relativePath,
         data: base64Data,
-        directory: Directory.Data,
+        directory: Directory.External,
         recursive: true
       });
 
       // Get real device URI
       const uriResult = await Filesystem.getUri({
         path: relativePath,
-        directory: Directory.Data
+        directory: Directory.External
       });
 
       nativeUri = uriResult.uri;
@@ -376,7 +378,7 @@ export async function readMediaAttachment(att) {
     try {
       const readResult = await Filesystem.readFile({
         path: att.filePath,
-        directory: Directory.Data
+        directory: Directory.External
       });
 
       if (readResult && readResult.data) {
@@ -702,12 +704,12 @@ export const StorageService = {
 
     await new Promise(res => { tx.oncomplete = () => res(true); });
 
-    // Also persist to target JSON file in Directory.Data
+    // Also persist to target JSON file in Directory.External
     try {
       await Filesystem.writeFile({
         path: targetConfig.dataFileName,
         data: JSON.stringify({ version: 2, environment: toEnv, lastUpdated: Date.now(), categories: sourceCats, notes: sourceNotes }, null, 2),
-        directory: Directory.Data,
+        directory: Directory.External,
         encoding: Encoding.UTF8,
         recursive: true
       });
@@ -827,7 +829,7 @@ export const StorageService = {
           try {
             await Filesystem.deleteFile({
               path: att.filePath,
-              directory: Directory.Data
+              directory: Directory.External
             });
           } catch (e) {
             console.warn('Attachment file delete warning:', e);
