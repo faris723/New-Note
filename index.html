@@ -2250,14 +2250,14 @@
         <button type="button" class="modal-close-btn" id="closeImportModalBtn">✕</button>
       </div>
       <p class="text-xs text-[var(--ink-soft)] leading-relaxed">
-        Pilih berkas cadangan <b>.json</b> atau arsip <b>.zip</b> yang pernah diekspor dari aplikasi Catatan Pintar. Semua data akan divalidasi dan disanitasi demi keamanan.
+        Pilih berkas cadangan <b>.json</b>, arsip <b>.zip</b>, atau berkas satu catatan <b>.cnote</b> (dari folder Catatan/) yang pernah diekspor dari aplikasi Catatan Pintar. Semua data akan divalidasi dan disanitasi demi keamanan.
       </p>
 
       <div class="drop-zone" id="importDropZone">
         <div class="drop-zone-text">
-          📥 <b>Pilih atau seret berkas .json atau .zip ke sini</b>
+          📥 <b>Pilih atau seret berkas .json, .zip, atau .cnote ke sini</b>
         </div>
-        <input type="file" id="importFileInput" accept=".json,.zip,application/json,application/zip,application/x-zip-compressed" style="display:none;">
+        <input type="file" id="importFileInput" accept=".json,.zip,.cnote,application/json,application/zip,application/x-zip-compressed" style="display:none;">
       </div>
 
       <div id="importFileInfo" style="display:none;" class="text-xs p-3 bg-white border border-[var(--card-edge)] rounded">
