@@ -15,6 +15,7 @@ import { AssistantService } from './modules/assistant.js';
 import { EditorService } from './modules/editor.js';
 import { PWAService } from './modules/pwa.js';
 import { UpdateService } from './modules/update.js';
+import { FileOpenService } from './modules/fileOpen.js';
 import { APP_VERSION } from './version.js';
 
 // Application State
@@ -1879,6 +1880,35 @@ async function init() {
     );
   } catch (updErr) {
     console.warn('UpdateService init notice:', updErr);
+  }
+
+  // Buka Catatan dari Berkas .cnote (tap berkas di file manager)
+  try {
+    FileOpenService.init(async (rawText) => {
+      try {
+        const parsed = ExportImportService.parseBackupText(rawText);
+        if (!parsed.notes.length) {
+          throw new Error('Berkas tidak berisi data catatan.');
+        }
+        const incoming = parsed.notes[0];
+        const idx = notes.findIndex(n => n.id === incoming.id);
+        if (idx >= 0) {
+          notes[idx] = incoming;
+        } else {
+          notes.unshift(incoming);
+        }
+        await StorageService.saveNote(incoming);
+        renderCategoryChips();
+        populateCategorySelect();
+        renderNotesList();
+        openNoteEditor(incoming);
+        UIService.showToast('Catatan berhasil dibuka dari berkas.', 'info');
+      } catch (parseErr) {
+        UIService.showToast('Gagal membuka berkas catatan: ' + parseErr.message, 'danger');
+      }
+    });
+  } catch (foErr) {
+    console.warn('FileOpenService init notice:', foErr);
   }
 
   // Start Reminder Background Checker
