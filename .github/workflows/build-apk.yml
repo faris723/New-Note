@@ -64,11 +64,21 @@ jobs:
             sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 24/g' variables.gradle
           fi
 
-      # 3. Membuat Gradle Wrapper dan memberikan izin eksekusi
+      # 3. Memasang Gradle versi yang kompatibel dengan AGP 8.13.0,
+      #    lalu membuat Gradle Wrapper dengan versi tersebut.
+      #    (Runner GitHub sekarang default ke Gradle 9.7.1, yang TIDAK
+      #    kompatibel dengan AGP 8.13.0 karena internal API yang dipakai
+      #    AGP sudah dihapus di Gradle 9.6+. Jadi kita pin versi Gradle
+      #    dulu sebelum generate wrapper.)
+      - name: Setup Compatible Gradle Version
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
       - name: Generate Gradle Wrapper
         working-directory: ./android
         run: |
-          gradle wrapper --gradle-version 8.14.3
+          gradle wrapper --gradle-version 8.13
           chmod +x gradlew
 
       # 4. Build Android APK menggunakan wrapper
@@ -81,4 +91,3 @@ jobs:
         with:
           name: CatatanPintar-app-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
