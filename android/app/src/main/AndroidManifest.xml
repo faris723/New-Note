@@ -22,6 +22,34 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Membuka berkas catatan (.cnote) langsung dari file manager -->
+            <intent-filter android:label="Buka dengan Catatan Pintar">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="content"
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.cnote" />
+                <data
+                    android:scheme="file"
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.cnote" />
+            </intent-filter>
+
+            <!-- Cadangan: sebagian file manager mengirim mimeType generik
+                 (application/octet-stream) untuk ekstensi yang tidak dikenal
+                 sistem, alih-alih mencocokkan lewat pola nama berkas -->
+            <intent-filter android:label="Buka dengan Catatan Pintar">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" />
+                <data android:scheme="file" android:mimeType="application/octet-stream" />
+            </intent-filter>
+
         </activity>
 
         <provider
