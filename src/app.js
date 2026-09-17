@@ -510,6 +510,7 @@ function openNoteEditor(note = null) {
     if (eventLocationEl) eventLocationEl.value = note.eventLocation || '';
 
     currentAttachments = (note.attachments || []).map(a => ({ ...a }));
+    if (note.finance?.type === 'expense') FeaturePackService.setEditorFunding(note.finance.funding || [{id:'net',amount:Number(note.finance.amount)||0}], Number(note.finance.amount)||0, note.id);
     el.deleteBtn.style.display = 'inline-block';
     el.exportNoteBtn.style.display = 'inline-block';
   } else {
@@ -540,6 +541,7 @@ function openNoteEditor(note = null) {
     if (eventLocationEl) eventLocationEl.value = '';
 
     currentAttachments = [];
+    FeaturePackService.setEditorFunding([{id:'net',amount:0}], 0, null);
     currentNoteIsPinned = false;
     el.deleteBtn.style.display = 'none';
     el.exportNoteBtn.style.display = 'none';
@@ -581,6 +583,7 @@ function closeNoteEditor() {
 }
 
 async function saveCurrentNote() {
+  const previousNote = currentNoteId ? notes.find(n => n.id === currentNoteId) : null;
   const title = el.noteTitle.value.trim() || 'Tanpa Judul';
   const bodyHTML = SecurityService.sanitizeHTML(el.noteBody.innerHTML);
   const category = el.categorySelect.value;
@@ -604,6 +607,10 @@ async function saveCurrentNote() {
       incomeFrom: (document.getElementById('cp104IncomeFrom')?.value || '').trim(),
       expenseFor: (document.getElementById('cp104ExpenseFor')?.value || '').trim()
     };
+    if (finance.type === 'expense') {
+      try { finance.funding = FeaturePackService.readEditorFunding(amt, previousNote); }
+      catch (fundErr) { UIService.showToast(fundErr.message, 'danger'); return; }
+    }
   }
 
   // Reminder
@@ -660,6 +667,21 @@ async function saveCurrentNote() {
       updatedAt: now
     };
     notes.unshift(noteObj);
+  }
+
+  // Jika transaksi lama tadinya memakai tabungan tetapi sekarang bukan pengeluaran, kembalikan saldo tabungan lama.
+  if (previousNote?.finance?.type === 'expense' && finance?.type !== 'expense') {
+    try { FeaturePackService.applySavingsDelta(previousNote.finance.funding || [{ id:'net', amount:Number(previousNote.finance.amount)||0 }], 1); }
+    catch (restoreErr) { UIService.showToast(restoreErr.message, 'danger'); return; }
+  }
+
+  // Terapkan perubahan sumber dana untuk pengeluaran. Dana tabungan benar-benar berkurang; Dana Bersih dihitung dari transaksi.
+  if (finance?.type === 'expense') {
+    try { FeaturePackService.applyEditorFunding(finance.funding || [{ id:'net', amount: finance.amount }], previousNote); }
+    catch (fundErr) { UIService.showToast(fundErr.message, 'danger'); return; }
+    await FeaturePackService.recordFundingHistory('transaction', noteObj.id, currentNoteId ? 'Ubah pengeluaran' : 'Pengeluaran', finance.amount, finance.funding || [], { note: finance.expenseFor || '' });
+  } else if (finance?.type === 'income') {
+    await FeaturePackService.recordFundingHistory('transaction', noteObj.id, currentNoteId ? 'Ubah pemasukan' : 'Pemasukan', finance.amount, [], { note: finance.incomeFrom || '' });
   }
 
   // Save to IndexedDB & sync
@@ -1194,6 +1216,12 @@ function bindEventListeners() {
 
   el.confirmOkBtn.onclick = async () => {
     if (pendingDeleteId) {
+      const deletedNote = notes.find(n => n.id === pendingDeleteId);
+      if (deletedNote?.finance?.type === 'expense') {
+        try { FeaturePackService.applySavingsDelta(deletedNote.finance.funding || [{ id:'net', amount:Number(deletedNote.finance.amount)||0 }], 1); }
+        catch (restoreErr) { UIService.showToast(restoreErr.message, 'danger'); return; }
+        await FeaturePackService.recordFundingHistory('transaction', deletedNote.id, 'Hapus pengeluaran', deletedNote.finance.amount, deletedNote.finance.funding || [], { note: 'Saldo sumber dana internal dikembalikan.' });
+      }
       await StorageService.deleteNote(pendingDeleteId);
       notes = notes.filter(n => n.id !== pendingDeleteId);
       pendingDeleteId = null;
@@ -1996,7 +2024,7 @@ async function init() {
     console.warn('ReminderService notice:', remErr);
   }
 
-  // Feature pack 1.0.4: keuangan, jadwal, batch tools, kategori cepat, anotasi gambar.
+  // Feature pack 1.0.5: keuangan, jadwal, batch tools, kategori cepat, anotasi gambar.
   try {
     FeaturePackService.init({
       getNotes: () => notes,
@@ -2042,7 +2070,14 @@ async function init() {
       getSelectedIds: () => Array.from(selectedNoteIds),
       clearSelection: () => { selectedNoteIds.clear(); isSelectMode = false; updateSelectModeUI(); renderNotesList(); },
       batchDelete: async (ids) => {
-        for (const noteId of ids) await StorageService.deleteNote(noteId);
+        for (const noteId of ids) {
+          const deletedNote = notes.find(n => n.id === noteId);
+          if (deletedNote?.finance?.type === 'expense') {
+            try { FeaturePackService.applySavingsDelta(deletedNote.finance.funding || [{ id:'net', amount:Number(deletedNote.finance.amount)||0 }], 1); } catch (restoreErr) { console.warn('Gagal mengembalikan sumber dana batch:', restoreErr); }
+            await FeaturePackService.recordFundingHistory('transaction', deletedNote.id, 'Hapus pengeluaran batch', deletedNote.finance.amount, deletedNote.finance.funding || [], { note: 'Saldo sumber dana internal dikembalikan.' });
+          }
+          await StorageService.deleteNote(noteId);
+        }
         notes = notes.filter(n => !ids.includes(n.id));
         renderCategoryChips(); renderNotesList(); await UIService.updateStorageMeter();
         document.dispatchEvent(new Event('cp104:refresh'));
