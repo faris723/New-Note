@@ -5,24 +5,24 @@ Aplikasi catatan pintar & manajemen keuangan lokal-pertama (offline-first) untuk
 ## Cara build APK (tanpa command line)
 
 1. Buka tab **Actions** di repo ini.
-2. Pilih workflow **"Build Android APK (Aplikasi Mandiri Tanpa Browser)"**.
+2. Pilih workflow **"Build Android APK"**.
 3. Klik tombol **"Run workflow"**.
 4. Untuk build biasa (hanya artifact, belum jadi Release resmi): biarkan kolom `release_tag` kosong.
-5. **Untuk merilis versi resmi** yang bisa dideteksi fitur "Cek Update" di dalam aplikasi: isi `release_tag` dengan nomor versi diawali huruf `v`, misalnya `v1.0.2`. Workflow otomatis akan:
+5. **Untuk merilis versi resmi** yang bisa dideteksi fitur "Cek Update" di dalam aplikasi: isi `release_tag` dengan nomor versi diawali huruf `v`, misalnya `v1.0.3`. Workflow otomatis akan:
    - Build APK
-   - Membuat tag Git `v1.0.2`
+   - Membuat tag Git `v1.0.3`
    - Membuat GitHub Release resmi + melampirkan file `.apk`
 
 Cek tab **Releases** setelah workflow selesai (±2-3 menit) — APK akan muncul di sana.
 
-## ⚠️ Setiap kali merilis versi baru, SAMAKAN 3 hal ini
+## ⚠️ Setiap kali merilis versi baru, SAMAKAN 4 hal ini
 
-| Lokasi | Contoh nilai untuk rilis v1.0.2 |
+| Lokasi | Contoh nilai untuk rilis v1.0.3 |
 |---|---|
-| `src/version.js` → `APP_VERSION` | `'1.0.2'` |
-| `android/app/build.gradle` → `versionName` | `"1.0.2"` |
-| `android/app/build.gradle` → `versionCode` | naikkan, misal dari `2` ke `3` |
-| `release_tag` saat menjalankan workflow | `v1.0.2` |
+| `src/version.js` → `APP_VERSION` | `'1.0.3'` |
+| `android/app/build.gradle` → `versionName` | `"1.0.3"` |
+| `android/app/build.gradle` → `versionCode` | naikkan, untuk 1.0.3 menjadi `4` |
+| `release_tag` saat menjalankan workflow | `v1.0.3` |
 
 Kalau `versionCode` lupa dinaikkan, Android akan menolak pasang APK baru menimpa yang lama (`INSTALL_FAILED_VERSION_DOWNGRADE`).
 
