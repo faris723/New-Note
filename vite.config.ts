@@ -2,7 +2,13 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
-import {VitePWA} from 'vite-plugin-pwa';
+
+// Catatan: plugin VitePWA sengaja TIDAK dipakai lagi di sini.
+// PWA (manifest, service worker, prompt install) sudah dikelola manual
+// lewat public/manifest.json, public/sw.js, dan src/modules/pwa.js.
+// Memakai VitePWA (registerType: 'autoUpdate') bersamaan dengan sw.js
+// custom menyebabkan dua service worker berebut nama file 'sw.js' saat
+// build, sehingga cache/update PWA jadi tidak konsisten.
 
 export default defineConfig(() => {
   return {
@@ -10,50 +16,6 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png'],
-        manifest: {
-          id: './',
-          name: 'Catatan Pintar — Offline',
-          short_name: 'Catatan',
-          description: 'Catatan pintar offline: tulis catatan, kelola keuangan, dan lampirkan file langsung di perangkat Anda.',
-          theme_color: '#47593f',
-          background_color: '#e9e3d5',
-          display: 'standalone',
-          start_url: './?source=pwa',
-          scope: './',
-          icons: [
-            {
-              src: './pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: './pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: './pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-            {
-              src: './icon.svg',
-              sizes: 'any',
-              type: 'image/svg+xml',
-            },
-          ],
-        },
-        devOptions: {
-          enabled: true,
-          type: 'module',
-        },
-      }),
     ],
     resolve: {
       alias: {
