@@ -25,16 +25,16 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: '22'
 
       - name: Install Dependencies
-        run: bun install
+        run: npm install --no-audit --no-fund
 
       - name: Build Web App
-        run: bun run build
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
