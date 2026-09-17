@@ -4,15 +4,14 @@ android {
     namespace = "com.catatanpintar.app"
     compileSdk = rootProject.ext.compileSdkVersion
 
-    // PENTING: mengunci signing debug ke file debug.keystore yang di-commit di repo ini
-    // (android/app/debug.keystore). Tanpa blok ini, Gradle di GitHub Actions memakai
-    // debug.keystore BAWAAN yang dibuat ULANG SECARA ACAK setiap runner baru — sehingga
-    // tiap APK hasil build dianggap "aplikasi lain" oleh Android (tanda tangan beda) dan
-    // pengguna WAJIB uninstall dulu sebelum bisa pasang versi baru. Dengan mengunci ke
-    // file ini, semua build APK ke depan akan selalu pakai kunci yang SAMA, sehingga
-    // update bisa dipasang menimpa versi lama tanpa uninstall.
+    // TEMPORARY COMPATIBILITY SIGNING:
+    // The existing 1.0.1 APKs were signed with this repository's legacy debug keystore.
+    // Keep using the exact same key for the bridge release so Android can update
+    // existing installations without uninstalling them first.
+    // DO NOT use this key for long-term production security; after migration,
+    // switch to a protected production keystore and accept a one-time reinstall.
     signingConfigs {
-        debug {
+        legacyCompat {
             storeFile file('debug.keystore')
             storePassword 'android'
             keyAlias 'androiddebugkey'
@@ -24,8 +23,8 @@ android {
         applicationId "com.catatanpintar.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 3
+        versionName "1.0.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -35,9 +34,11 @@ android {
     }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.legacyCompat
         }
         release {
+            // Bridge release: same signing identity as the installed 1.0.1 APK.
+            signingConfig signingConfigs.legacyCompat
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
