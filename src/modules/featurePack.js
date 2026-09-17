@@ -13,6 +13,7 @@ import { SecurityService } from './security.js';
 
 const OBL_KEY = 'cp_obligations_v2';
 const SAV_KEY = 'cp_savings_v2';
+const HIST_KEY = 'cp_finance_history_v1';
 const esc = (v) => SecurityService.escapeHtml(String(v ?? ''));
 const rupiah = (v) => 'Rp ' + Number(v || 0).toLocaleString('id-ID');
 const today = () => new Date().toISOString().slice(0, 10);
@@ -26,6 +27,11 @@ const loadJSON = (key, fallback = []) => {
   }
 };
 const saveJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+const loadHistory = () => loadJSON(HIST_KEY, []);
+const saveHistory = (items) => saveJSON(HIST_KEY, items.slice(-1000));
+const addHistory = (entry) => { const items = loadHistory(); items.push({ id: uid('hist'), at: Date.now(), ...entry }); saveHistory(items); };
+const fundingLabel = (id, savings = []) => id === 'net' ? 'Dana Bersih' : id === 'other' ? 'Lainnya / sumber manual' : (savings.find(s => s.id === id)?.name || id);
+const sumFunding = (funding = []) => funding.reduce((n, x) => n + Number(x.amount || 0), 0);
 
 function addStyle() {
   if (document.getElementById('cp104-style')) return;
@@ -39,7 +45,7 @@ function addStyle() {
     .cp104-grid{max-width:960px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cp104-card{background:#fff;border:1px solid var(--card-edge,#ddd);border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.cp104-card h3{margin:0 0 6px;font:700 14px 'Source Serif 4',Georgia,serif}.cp104-val{font:700 18px 'IBM Plex Mono',monospace}.cp104-muted{font-size:11px;color:var(--ink-soft,#667)}
     .cp104-wide{grid-column:1/-1}.cp104-scroll{overflow:auto;max-height:320px}.cp104-input{width:100%;box-sizing:border-box;border:1px solid var(--card-edge,#ddd);border-radius:7px;padding:9px;background:#fff}.cp104-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.cp104-row>*{flex:1;min-width:0}.cp104-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;border:1px solid #ddd;font-size:11px;background:#fff}.cp104-bar{height:9px;border-radius:8px;background:#eee9dc;overflow:hidden}.cp104-bar>i{display:block;height:100%;background:var(--moss,#47593f)}
     .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}.cp104-day{min-height:62px;border:1px solid #e7e1d3;background:#fff;border-radius:6px;padding:5px;font-size:11px;cursor:pointer}.cp104-day.muted{opacity:.42}.cp104-day.sel{outline:2px solid var(--ink,#27352b)}.cp104-day b{display:block;margin-bottom:4px}.cp104-dot{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px;margin-top:2px;padding:1px 3px;border-radius:4px;background:#f3ead2}
-    .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
+    .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-funding{border:1px dashed #d8d0bf;border-radius:8px;padding:9px;background:#faf7ee}.cp104-funding-search{margin-bottom:7px}.cp104-fund-row{display:grid;grid-template-columns:auto 1fr 120px;gap:7px;align-items:center;padding:5px 0}.cp104-fund-row input[type=number]{width:100%;box-sizing:border-box}.cp104-history{margin-top:8px;border-top:1px solid #eee8dc;padding-top:7px}.cp104-history-item{padding:7px 0;border-bottom:1px solid #eee8dc;font-size:11px}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
     .cp104-batch{position:fixed;left:10px;right:10px;bottom:74px;z-index:89;display:none;background:#fffdf7;border:1px solid #d8d0bf;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.cp104-batch.open{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.cp104-batch button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:700}
     .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none}
     @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-wide{grid-column:auto}.cp104-nav button{padding:8px 10px}.cp104-title{font-size:19px}}
@@ -89,14 +95,14 @@ export const FeaturePackService = {
         <div class="cp104-grid">
           <div class="cp104-card"><div class="cp104-muted">Pemasukan</div><div class="cp104-val" id="cp104Income">Rp 0</div></div>
           <div class="cp104-card"><div class="cp104-muted">Pengeluaran</div><div class="cp104-val" id="cp104Expense">Rp 0</div></div>
-          <div class="cp104-card"><div class="cp104-muted">Saldo Bersih</div><div class="cp104-val" id="cp104Balance">Rp 0</div></div>
+          <div class="cp104-card"><div class="cp104-muted">Saldo Bersih</div><div class="cp104-row"><div class="cp104-val" id="cp104Balance">Rp 0</div><button type="button" class="cp104-btn" id="cp104HistoryNet">Riwayat</button></div></div>
           <div class="cp104-card"><div class="cp104-muted">Hutang Aktif</div><div class="cp104-val" id="cp104Debt">Rp 0</div></div>
           <div class="cp104-card"><div class="cp104-muted">Kewajiban Belum Lunas</div><div class="cp104-val" id="cp104Obligation">Rp 0</div></div>
           <div class="cp104-card"><div class="cp104-muted">Total Tabungan</div><div class="cp104-val" id="cp104Savings">Rp 0</div></div>
           <div class="cp104-card cp104-wide"><div class="cp104-row"><input class="cp104-input" type="date" id="cp104FinFrom"><input class="cp104-input" type="date" id="cp104FinTo"><button type="button" class="cp104-btn" id="cp104ResetFin">Semua tanggal</button></div><div style="height:10px"></div><div id="cp104FinanceChart"></div></div>
-          <div class="cp104-card"><h3>Transaksi</h3><div class="cp104-scroll" id="cp104TxList"></div></div>
+          <div class="cp104-card"><h3>Transaksi</h3><div class="cp104-scroll" id="cp104TxList"></div><div class="cp104-history"><button type="button" class="cp104-btn" id="cp104HistoryAll">Riwayat Semua Dana & Transaksi</button></div></div>
           <div class="cp104-card"><h3>Hutang</h3><div class="cp104-scroll" id="cp104DebtList"></div></div>
-          <div class="cp104-card cp104-wide"><div class="cp104-row"><h3 style="margin-right:auto">Dana Pengeluaran Wajib</h3><button type="button" class="cp104-btn" id="cp104AddOb">+ Tambah</button></div><div class="cp104-row"><input class="cp104-input" id="cp104ObName" placeholder="Nama kewajiban"><input class="cp104-input" id="cp104ObAmount" type="number" min="0" placeholder="Nominal"><input class="cp104-input" id="cp104ObDue" type="date"><label class="cp104-check"><input type="checkbox" id="cp104ObDeduct" checked> Kurangi dari saldo bersih</label></div><div class="cp104-scroll" id="cp104ObList"></div></div>
+          <div class="cp104-card cp104-wide"><div class="cp104-row"><h3 style="margin-right:auto">Dana Pengeluaran Wajib</h3><button type="button" class="cp104-btn" id="cp104AddOb">+ Tambah</button></div><div class="cp104-row"><input class="cp104-input" id="cp104ObName" placeholder="Nama kewajiban"><input class="cp104-input" id="cp104ObAmount" type="number" min="0" placeholder="Nominal"><input class="cp104-input" id="cp104ObDue" type="date"></div><div class="cp104-help">Sumber dana dipilih saat kewajiban dibayar. Bisa Dana Bersih, satu/lebih tabungan, atau Lainnya.</div><div class="cp104-scroll" id="cp104ObList"></div></div>
           <div class="cp104-card cp104-wide"><div class="cp104-row"><h3 style="margin-right:auto">Pos Tabungan</h3><button type="button" class="cp104-btn" id="cp104AddSav">+ Pos Baru</button><button type="button" class="cp104-btn" id="cp104DepositSav">Setor / Tarik</button></div><div class="cp104-scroll" id="cp104SavList"></div></div>
         </div>`;
       document.body.appendChild(fin);
@@ -150,6 +156,11 @@ export const FeaturePackService = {
       wrap.innerHTML = '<input id="cp104FinanceDate" class="cp104-input" type="date" style="flex:0 0 160px"><input id="cp104IncomeFrom" class="cp104-input" style="flex:1" placeholder="Pemasukan dari siapa / sumber"><input id="cp104ExpenseFor" class="cp104-input" style="flex:1;display:none" placeholder="Pengeluaran untuk apa">';
       fin.parentElement?.appendChild(wrap);
     }
+    if (fin && !document.getElementById('cp104EditorFunding')) {
+      const wrap = document.createElement('div'); wrap.id='cp104EditorFunding'; wrap.style.cssText='display:none;margin-top:8px';
+      wrap.innerHTML=this.fundingPickerHTML([{id:'net',amount:0}],0,null);
+      fin.parentElement?.appendChild(wrap);
+    }
     const rem = document.getElementById('reminderRow');
     if (rem && !document.getElementById('cp104ScheduleExtra')) {
       const row = document.createElement('div');
@@ -172,6 +183,8 @@ export const FeaturePackService = {
     document.getElementById('cp104AddExpense').onclick = () => this.openFinanceForm('expense');
     document.getElementById('cp104AddDebt').onclick = () => this.openFinanceForm('debt');
     document.getElementById('cp104ExportFinance').onclick = () => this.exportFinance();
+    document.getElementById('cp104HistoryAll').onclick = () => this.openHistoryModal();
+    document.getElementById('cp104HistoryNet').onclick = () => this.openHistoryModal('net','net','Riwayat Dana Bersih');
     document.getElementById('cp104FinFrom').onchange = () => this.renderFinance();
     document.getElementById('cp104FinTo').onchange = () => this.renderFinance();
     document.getElementById('cp104ResetFin').onclick = () => { document.getElementById('cp104FinFrom').value = ''; document.getElementById('cp104FinTo').value = ''; this.renderFinance(); };
@@ -190,6 +203,8 @@ export const FeaturePackService = {
       const financeRow = document.getElementById('cp104FinanceExtra');
       if (eventRow) eventRow.style.display = category === 'acara' ? 'block' : 'none';
       if (financeRow) financeRow.style.display = category === 'keuangan' ? 'flex' : 'none';
+      const editorFunding = document.getElementById('cp104EditorFunding');
+      if (editorFunding) editorFunding.style.display = category === 'keuangan' && type === 'expense' ? 'block' : 'none';
       const income = document.getElementById('cp104IncomeFrom');
       const expense = document.getElementById('cp104ExpenseFor');
       if (income) income.style.display = category === 'keuangan' && type === 'income' ? 'block' : 'none';
@@ -222,15 +237,115 @@ export const FeaturePackService = {
     if (tab === 'schedule') this.renderCalendar();
   },
 
-  getTx() {
+  setEditorFunding(funding = [], amount = 0, excludeNoteId = null) {
+    const wrap=document.getElementById('cp104EditorFunding'); if(!wrap)return;
+    wrap.innerHTML=this.fundingPickerHTML(funding.length?funding:[{id:'net',amount}],amount,excludeNoteId);
+    const form=wrap.closest('.finance-row')?.parentElement || document;
+    const amountInput=document.getElementById('financeAmount');
+    this.bindFundingPicker(wrap,amountInput);
+    wrap.querySelector('#cp104FundingSearch')?.addEventListener('input',()=>{});
+  },
+
+  readEditorFunding(amount, existingNote = null) {
+    const wrap=document.getElementById('cp104EditorFunding');
+    if(!wrap || getComputedStyle(wrap).display==='none') return [{id:'net',amount:Number(amount)||0}];
+    return this.readFunding(wrap,amount,existingNote?.id || null);
+  },
+
+  applyEditorFunding(funding, existingNote = null) {
+    const old = existingNote?.finance?.funding || (existingNote?.finance?.type==='expense' ? [{id:'net',amount:Number(existingNote.finance.amount)||0}] : []);
+    if(existingNote?.finance?.type==='expense') this.applySavingsDelta(old,1);
+    this.applySavingsDelta(funding,-1);
+  },
+
+  getTxBase() {
     const notes = this.ctx?.getNotes?.() || [];
+    return notes.filter((note) => note.category === 'keuangan' && note.finance).map((note) => ({ ...note, amount: Number(note.finance.amount) || 0, type: note.finance.type || 'expense', date: note.finance.date || new Date(note.updatedAt || note.createdAt || Date.now()).toISOString().slice(0, 10), funding: Array.isArray(note.finance.funding) && note.finance.funding.length ? note.finance.funding : [{ id: 'net', amount: Number(note.finance.amount) || 0 }] }));
+  },
+
+  getBaseNetBalance(excludeNoteId = null) {
+    const tx = this.getTxBase().filter(n => n.id !== excludeNoteId);
+    const income = tx.filter(x => x.type === 'income').reduce((n,x)=>n+x.amount,0);
+    const netExpense = tx.filter(x => x.type === 'expense').reduce((n,x)=>n+sumFunding(x.funding.filter(f=>f.id==='net')),0);
+    const netObligation = this.obligations.filter(x=>x.isPaid).reduce((n,x)=>n+sumFunding(x.funding?.filter(f=>f.id==='net') || (x.deductFromNet ? [{id:'net',amount:x.amount}] : [])),0);
+    return income - netExpense - netObligation;
+  },
+
+  getFundingSources(excludeNoteId = null, currentFunding = []) {
+    const net = this.getBaseNetBalance(excludeNoteId) + sumFunding(currentFunding.filter(f=>f.id==='net'));
+    const sources = [{ id:'net', label:'Dana Bersih', balance:net }];
+    this.savings.forEach(s => {
+      const current = sumFunding(currentFunding.filter(f=>f.id===s.id));
+      sources.push({ id:s.id, label:s.name, balance:Number(s.balance||0)+current });
+    });
+    sources.push({ id:'other', label:'Lainnya / sumber manual', balance:null });
+    return sources;
+  },
+
+  fundingPickerHTML(selected = [], amount = 0, excludeNoteId = null) {
+    const sources = this.getFundingSources(excludeNoteId, selected);
+    const selectedMap = Object.fromEntries(selected.map(f=>[f.id,Number(f.amount)||0]));
+    return `<div class="cp104-funding"><b>Sumber dana</b><div class="cp104-help">Pilih satu atau beberapa sumber. Jumlah seluruh sumber harus tepat sama dengan nominal.</div><input class="cp104-input cp104-funding-search" id="cp104FundingSearch" placeholder="🔎 Cari sumber dana…"><div id="cp104FundingRows">${sources.map(src=>`<label class="cp104-fund-row" data-fund-label="${esc(src.label).toLowerCase()}"><input type="checkbox" name="fundSource" value="${esc(src.id)}" ${selectedMap[src.id] != null ? 'checked' : ''}><span>${esc(src.label)}${src.balance != null ? ` <small>(${rupiah(src.balance)})</small>` : ''}</span><input class="cp104-input" type="number" min="0" step="1000" name="fundAmount:${esc(src.id)}" value="${selectedMap[src.id] || ''}" placeholder="Rp"></label>`).join('')}</div><label style="display:none" id="cp104OtherSourceWrap">Nama sumber manual<input class="cp104-input" name="otherSource" placeholder="Contoh: Uang tunai, pasangan, rekening lain"></label><div class="cp104-help" id="cp104FundingTotal">Terpakai: Rp 0 / ${rupiah(amount)}</div></div>`;
+  },
+
+  bindFundingPicker(form, amountInput) {
+    const search = form.querySelector('#cp104FundingSearch');
+    const rows = () => Array.from(form.querySelectorAll('.cp104-fund-row'));
+    const sync = () => {
+      const term=(search?.value||'').toLowerCase().trim(); rows().forEach(r=>r.style.display=!term||r.dataset.fundLabel.includes(term)?'grid':'none');
+      const selected=Array.from(form.querySelectorAll('input[name="fundSource"]:checked')).map(c=>c.value);
+      form.querySelector('#cp104OtherSourceWrap')?.style.setProperty('display',selected.includes('other')?'grid':'none');
+      const total=selected.reduce((n,id)=>n+(Number(form.querySelector(`[name="fundAmount:${CSS.escape(id)}"]`)?.value)||0),0);
+      const target=Number(amountInput?.value)||0; const node=form.querySelector('#cp104FundingTotal'); if(node) node.textContent=`Terpakai: ${rupiah(total)} / ${rupiah(target)}`;
+      const netCb=form.querySelector('input[name="fundSource"][value="net"]'); if(netCb && selected.length===1 && netCb.checked){ const inp=form.querySelector('[name="fundAmount:net"]'); if(inp && !inp.dataset.touched) inp.value=target||''; }
+    };
+    search?.addEventListener('input',sync);
+    form.querySelectorAll('input[name="fundSource"]').forEach(cb=>cb.addEventListener('change',()=>{ const inp=form.querySelector(`[name="fundAmount:${CSS.escape(cb.value)}"]`); if(cb.checked && inp && !inp.value) inp.value=Number(amountInput?.value)||''; if(!cb.checked&&inp) inp.value=''; sync(); }));
+    form.querySelectorAll('input[name^="fundAmount:"]').forEach(inp=>inp.addEventListener('input',()=>{inp.dataset.touched='1';sync();}));
+    amountInput?.addEventListener('input',()=>{ const net=form.querySelector('input[name="fundSource"][value="net"]:checked'); if(net){const inp=form.querySelector('[name="fundAmount:net"]');if(inp&&!inp.dataset.touched)inp.value=Number(amountInput.value)||'';} sync(); });
+    sync();
+  },
+
+  readFunding(form, amount, excludeNoteId = null) {
+    const ids=Array.from(form.querySelectorAll('input[name="fundSource"]:checked')).map(c=>c.value);
+    const funding=ids.map(id=>({id,amount:Number(form.querySelector(`[name="fundAmount:${CSS.escape(id)}"]`)?.value)||0})).filter(x=>x.amount>0);
+    if(sumFunding(funding)!==Number(amount)){ throw new Error(`Jumlah sumber dana ${rupiah(sumFunding(funding))} harus sama dengan nominal ${rupiah(amount)}.`); }
+    const sources=this.getFundingSources(excludeNoteId, []);
+    for(const f of funding){const src=sources.find(s=>s.id===f.id); if(src?.balance!=null && f.amount>src.balance) throw new Error(`Saldo ${src.label} tidak cukup. Tersedia ${rupiah(src.balance)}.`);}
+    if(funding.some(f=>f.id==='other')){const manual=String(form.querySelector('[name="otherSource"]')?.value||'').trim();if(!manual)throw new Error('Isi nama sumber manual jika memilih Lainnya.');funding.find(f=>f.id==='other').label=manual;}
+    return funding;
+  },
+
+  applySavingsDelta(funding, sign=1) {
+    for(const f of funding||[]){if(f.id==='other'||f.id==='net')continue;const s=this.savings.find(x=>x.id===f.id);if(!s)throw new Error('Pos tabungan sumber dana tidak ditemukan.');s.balance=Number(s.balance||0)+sign*Number(f.amount||0);if(s.balance<0)throw new Error(`Saldo tabungan ${s.name} tidak mencukupi.`);}
+    saveJSON(SAV_KEY,this.savings);
+  },
+
+  sourceSummary(funding=[]) { return funding.map(f=>`${esc(f.label || fundingLabel(f.id,this.savings))}: ${rupiah(f.amount)}`).join(' + ') || '—'; },
+
+  async recordFundingHistory(entityType, entityId, action, amount, funding, extra={}) {
+    const normalized=(funding||[]).map(f=>({id:f.id,label:f.label||fundingLabel(f.id,this.savings),amount:Number(f.amount)||0}));
+    addHistory({entityType,entityId,action,amount:Number(amount)||0,funding:normalized,...extra});
+    // Salin juga ke riwayat masing-masing sumber internal agar setiap dana punya audit trail sendiri.
+    normalized.forEach(f=>{
+      if(f.id==='net') addHistory({entityType:'net',entityId:'net',action,amount:f.amount,funding:[f],relatedEntityId:entityId,...extra});
+      else if(this.savings.some(s=>s.id===f.id)) addHistory({entityType:'savings',entityId:f.id,action,amount:f.amount,funding:[f],relatedEntityId:entityId,...extra});
+    });
+  },
+
+  openHistoryModal(entityType=null, entityId=null, title='Riwayat Transaksi') {
+    let modal=document.getElementById('cp104HistoryModal');
+    if(!modal){modal=document.createElement('div');modal.id='cp104HistoryModal';modal.className='cp104-modal';modal.innerHTML='<div class="cp104-dialog"><div class="cp104-head"><div class="cp104-title" id="cp104HistoryTitle">Riwayat Transaksi</div><button type="button" class="cp104-btn" id="cp104HistoryClose">Tutup</button></div><div class="cp104-scroll" id="cp104HistoryList"></div></div>';document.body.appendChild(modal);modal.querySelector('#cp104HistoryClose').onclick=()=>modal.classList.remove('open');}
+    const all=loadHistory().filter(h=>(!entityType||h.entityType===entityType)&&(!entityId||h.entityId===entityId)).sort((a,b)=>b.at-a.at);
+    document.getElementById('cp104HistoryTitle').textContent=title;
+    document.getElementById('cp104HistoryList').innerHTML=all.length?all.map(h=>`<div class="cp104-history-item"><b>${esc(h.action)}</b> · ${rupiah(h.amount)}<div>${esc(new Date(h.at).toLocaleString('id-ID'))}</div><div>Sumber: ${this.sourceSummary(h.funding||[])}</div>${h.note?`<div>${esc(h.note)}</div>`:''}</div>`).join(''):'<div class="cp104-muted">Belum ada riwayat.</div>';
+    modal.classList.add('open');
+  },
+
+  getTx() {
     const from = document.getElementById('cp104FinFrom')?.value || '';
     const to = document.getElementById('cp104FinTo')?.value || '';
-    return notes
-      .filter((note) => note.category === 'keuangan' && note.finance)
-      .map((note) => ({ ...note, amount: Number(note.finance.amount) || 0, type: note.finance.type || 'expense', date: note.finance.date || new Date(note.updatedAt || note.createdAt || Date.now()).toISOString().slice(0, 10) }))
-      .filter((note) => (!from || note.date >= from) && (!to || note.date <= to))
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)) || (b.updatedAt || 0) - (a.updatedAt || 0));
+    return this.getTxBase().filter((note) => (!from || note.date >= from) && (!to || note.date <= to)).sort((a, b) => String(b.date).localeCompare(String(a.date)) || (b.updatedAt || 0) - (a.updatedAt || 0));
   },
 
   renderFinance() {
@@ -240,7 +355,10 @@ export const FeaturePackService = {
     const debt = tx.filter((x) => x.type === 'debt' && !x.finance.debtPaid).reduce((sum, x) => sum + x.amount, 0);
     const obligation = this.obligations.filter((x) => !x.isPaid).reduce((sum, x) => sum + Number(x.amount || 0), 0);
     const savings = this.savings.reduce((sum, x) => sum + Number(x.balance || 0), 0);
-    const values = { Income: income, Expense: expense, Balance: income - expense, Debt: debt, Obligation: obligation, Savings: savings };
+    const netExpense = tx.filter(x=>x.type==='expense').reduce((n,x)=>n+sumFunding(x.funding.filter(f=>f.id==='net')),0);
+    const paidObNet = this.obligations.filter(x=>x.isPaid).reduce((n,x)=>n+sumFunding(x.funding?.filter(f=>f.id==='net') || (x.deductFromNet?[{id:'net',amount:x.amount}]:[])),0);
+    const balance = income - netExpense - paidObNet;
+    const values = { Income: income, Expense: expense, Balance: balance, Debt: debt, Obligation: obligation, Savings: savings };
     Object.entries(values).forEach(([key, value]) => { const node = document.getElementById(`cp104${key}`); if (node) node.textContent = rupiah(value); });
 
     const max = Math.max(income, expense, debt, 1);
@@ -249,8 +367,9 @@ export const FeaturePackService = {
 
     const list = document.getElementById('cp104TxList');
     if (list) {
-      list.innerHTML = tx.length ? tx.slice(0, 50).map((note) => `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1;cursor:pointer" data-tx-open="${esc(note.id)}"><b>${esc(note.title)}</b><div class="cp104-muted">${note.type === 'income' ? '+' : '-'} ${rupiah(note.amount)} · ${esc(note.date)}</div></div><button type="button" class="cp104-btn" data-tx-delete="${esc(note.id)}">Hapus</button></div></div>`).join('') : '<div class="cp104-muted">Belum ada transaksi.</div>';
+      list.innerHTML = tx.length ? tx.slice(0, 50).map((note) => `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1;cursor:pointer" data-tx-open="${esc(note.id)}"><b>${esc(note.title)}</b><div class="cp104-muted">${note.type === 'income' ? '+' : '-'} ${rupiah(note.amount)} · ${esc(note.date)}</div>${note.type==='expense'?`<div class="cp104-help">Sumber: ${this.sourceSummary(note.funding)}</div>`:''}</div><button type="button" class="cp104-btn" data-tx-history="${esc(note.id)}">Riwayat</button><button type="button" class="cp104-btn" data-tx-delete="${esc(note.id)}">Hapus</button></div></div>`).join('') : '<div class="cp104-muted">Belum ada transaksi.</div>';
       list.querySelectorAll('[data-tx-open]').forEach((node) => node.onclick = () => this.ctx.openNote(node.dataset.txOpen));
+      list.querySelectorAll('[data-tx-history]').forEach((node) => node.onclick = () => this.openHistoryModal('transaction', node.dataset.txHistory, 'Riwayat Transaksi'));
       list.querySelectorAll('[data-tx-delete]').forEach((node) => node.onclick = async () => { await this.deleteNote(node.dataset.txDelete); });
     }
 
@@ -264,50 +383,68 @@ export const FeaturePackService = {
 
     const obList = document.getElementById('cp104ObList');
     if (obList) {
-      obList.innerHTML = this.obligations.length ? this.obligations.map((item, i) => `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1"><b>${esc(item.name)}</b><div class="cp104-muted">${rupiah(item.amount)}${item.dueDate ? ` · jatuh tempo ${esc(item.dueDate)}` : ''}${item.deductFromNet ? ' · kurangi saldo' : ''}</div></div><button type="button" class="cp104-btn" data-ob-toggle="${i}">${item.isPaid ? 'Belum Lunas' : 'Lunas'}</button><button type="button" class="cp104-btn" data-ob-del="${i}">×</button></div></div>`).join('') : '<div class="cp104-muted">Belum ada kewajiban.</div>';
-      obList.querySelectorAll('[data-ob-toggle]').forEach((button) => button.onclick = () => { this.obligations[Number(button.dataset.obToggle)].isPaid = !this.obligations[Number(button.dataset.obToggle)].isPaid; saveJSON(OBL_KEY, this.obligations); this.renderFinance(); });
+      obList.innerHTML = this.obligations.length ? this.obligations.map((item, i) => `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1"><b>${esc(item.name)}</b><div class="cp104-muted">${rupiah(item.amount)}${item.dueDate ? ` · jatuh tempo ${esc(item.dueDate)}` : ''}${item.isPaid ? ` · Dibayar dari: ${this.sourceSummary(item.funding || (item.deductFromNet ? [{id:'net',amount:item.amount}] : []))}` : ' · Belum dibayar'}</div></div><button type="button" class="cp104-btn" data-ob-toggle="${i}">${item.isPaid ? 'Batalkan Lunas' : 'Bayar / Pilih Dana'}</button><button type="button" class="cp104-btn" data-ob-history="${esc(item.id)}">Riwayat</button><button type="button" class="cp104-btn" data-ob-del="${i}">×</button></div></div>`).join('') : '<div class="cp104-muted">Belum ada kewajiban.</div>';
+      obList.querySelectorAll('[data-ob-toggle]').forEach((button) => button.onclick = () => { const i=Number(button.dataset.obToggle); if(this.obligations[i]?.isPaid) this.unpayObligation(i); else this.openObligationPaymentForm(i); });
+      obList.querySelectorAll('[data-ob-history]').forEach((button) => button.onclick = () => this.openHistoryModal('obligation', button.dataset.obHistory, 'Riwayat Dana Pengeluaran Wajib'));
       obList.querySelectorAll('[data-ob-del]').forEach((button) => button.onclick = () => { this.obligations.splice(Number(button.dataset.obDel), 1); saveJSON(OBL_KEY, this.obligations); this.renderFinance(); });
     }
 
     const savList = document.getElementById('cp104SavList');
     if (savList) {
-      savList.innerHTML = this.savings.length ? this.savings.map((item, i) => { const pct = item.target ? Math.min(100, Math.round(Number(item.balance || 0) / Number(item.target) * 100)) : 0; return `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1"><b>${esc(item.name)}</b><div class="cp104-muted">${rupiah(item.balance)} / ${rupiah(item.target || 0)}${item.source ? ` · ${esc(item.source)}` : ''}</div></div><button type="button" class="cp104-btn" data-sav-del="${i}">×</button></div><div class="cp104-bar"><i style="width:${pct}%"></i></div><div class="cp104-muted">${pct}%</div></div>`; }).join('') : '<div class="cp104-muted">Belum ada pos tabungan.</div>';
+      savList.innerHTML = this.savings.length ? this.savings.map((item, i) => { const pct = item.target ? Math.min(100, Math.round(Number(item.balance || 0) / Number(item.target) * 100)) : 0; return `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1"><b>${esc(item.name)}</b><div class="cp104-muted">${rupiah(item.balance)} / ${rupiah(item.target || 0)}${item.source ? ` · ${esc(item.source)}` : ''}</div></div><button type="button" class="cp104-btn" data-sav-history="${esc(item.id)}">Riwayat</button><button type="button" class="cp104-btn" data-sav-del="${i}">×</button></div><div class="cp104-bar"><i style="width:${pct}%"></i></div><div class="cp104-muted">${pct}%</div></div>`; }).join('') : '<div class="cp104-muted">Belum ada pos tabungan.</div>';
+      savList.querySelectorAll('[data-sav-history]').forEach((button) => button.onclick = () => this.openHistoryModal('savings', button.dataset.savHistory, 'Riwayat Pos Tabungan'));
       savList.querySelectorAll('[data-sav-del]').forEach((button) => button.onclick = () => { this.savings.splice(Number(button.dataset.savDel), 1); saveJSON(SAV_KEY, this.savings); this.renderFinance(); });
     }
   },
 
   openFinanceForm(type, existing = null) {
     const labels = { income: 'Pemasukan', expense: 'Pengeluaran', debt: 'Hutang' };
-    const note = existing || {};
-    const finance = note.finance || {};
+    const note = existing || {}; const finance = note.finance || {};
     const fields = document.getElementById('cp104FormFields');
     document.getElementById('cp104FormTitle').textContent = `${existing ? 'Edit' : 'Tambah'} ${labels[type]}`;
-    fields.innerHTML = `<label>Judul<input class="cp104-input" name="title" required value="${esc(note.title || labels[type])}" placeholder="Contoh: Gaji September"></label><div class="cp104-row"><label>Nominal (Rp)<input class="cp104-input" name="amount" type="number" min="0" step="1000" required value="${Number(finance.amount || 0) || ''}"></label><label>Tanggal<input class="cp104-input" name="date" type="date" required value="${esc(finance.date || today())}"></label></div>${type === 'income' ? '<label>Sumber pemasukan<input class="cp104-input" name="source" value=""></label>' : ''}${type === 'expense' ? '<label>Pengeluaran untuk<input class="cp104-input" name="purpose" value=""></label>' : ''}${type === 'debt' ? '<div class="cp104-row"><label>Hutang kepada<input class="cp104-input" name="debtTo" value=""></label><label>Untuk apa<input class="cp104-input" name="debtPurpose" value=""></label></div><label class="cp104-check"><input type="checkbox" name="debtPaid"> Sudah lunas</label>' : ''}<label>Catatan tambahan<textarea class="cp104-input" name="body" rows="4" placeholder="Opsional"></textarea></label>`;
+    const oldFunding = Array.isArray(finance.funding) && finance.funding.length ? finance.funding : (type === 'expense' ? [{id:'net',amount:Number(finance.amount)||0}] : []);
+    fields.innerHTML = `<label>Judul<input class="cp104-input" name="title" required value="${esc(note.title || labels[type])}" placeholder="Contoh: Gaji September"></label><div class="cp104-row"><label>Nominal (Rp)<input class="cp104-input" name="amount" type="number" min="0" step="1000" required value="${Number(finance.amount || 0) || ''}"></label><label>Tanggal<input class="cp104-input" name="date" type="date" required value="${esc(finance.date || today())}"></label></div>${type === 'income' ? '<label>Sumber pemasukan<input class="cp104-input" name="source" value=""></label>' : ''}${type === 'expense' ? this.fundingPickerHTML(oldFunding, Number(finance.amount)||0, existing?.id || null) + '<label>Pengeluaran untuk<input class="cp104-input" name="purpose" value=""></label>' : ''}${type === 'debt' ? '<div class="cp104-row"><label>Hutang kepada<input class="cp104-input" name="debtTo" value=""></label><label>Untuk apa<input class="cp104-input" name="debtPurpose" value=""></label></div><label class="cp104-check"><input type="checkbox" name="debtPaid"> Sudah lunas</label>' : ''}<label>Catatan tambahan<textarea class="cp104-input" name="body" rows="4" placeholder="Opsional"></textarea></label>`;
     const form = document.getElementById('cp104Form');
-    form.querySelector('[name="source"]')?.setAttribute('value', finance.incomeFrom || '');
-    form.querySelector('[name="purpose"]')?.setAttribute('value', finance.expenseFor || '');
-    form.querySelector('[name="debtTo"]')?.setAttribute('value', finance.debtTo || '');
-    form.querySelector('[name="debtPurpose"]')?.setAttribute('value', finance.debtPurpose || '');
-    if (form.querySelector('[name="debtPaid"]')) form.querySelector('[name="debtPaid"]').checked = Boolean(finance.debtPaid);
-    form.querySelector('[name="body"]').value = SecurityService.stripHtml(note.bodyHTML || '');
+    form.querySelector('[name="source"]')?.setAttribute('value', finance.incomeFrom || ''); form.querySelector('[name="purpose"]')?.setAttribute('value', finance.expenseFor || ''); form.querySelector('[name="debtTo"]')?.setAttribute('value', finance.debtTo || ''); form.querySelector('[name="debtPurpose"]')?.setAttribute('value', finance.debtPurpose || '');
+    if (form.querySelector('[name="debtPaid"]')) form.querySelector('[name="debtPaid"]').checked = Boolean(finance.debtPaid); form.querySelector('[name="body"]').value = SecurityService.stripHtml(note.bodyHTML || '');
+    if(type==='expense') this.bindFundingPicker(form, form.querySelector('[name="amount"]'));
     form.onsubmit = async (event) => { event.preventDefault(); await this.saveFinanceForm(type, existing?.id || null); };
-    document.getElementById('cp104FormModal').classList.add('open');
-    form.querySelector('[name="title"]').focus();
+    document.getElementById('cp104FormModal').classList.add('open'); form.querySelector('[name="title"]').focus();
   },
 
   async saveFinanceForm(type, existingId = null) {
-    const form = document.getElementById('cp104Form');
-    const data = new FormData(form);
-    const amount = Number(data.get('amount')) || 0;
+    const form = document.getElementById('cp104Form'); const data = new FormData(form); const amount = Number(data.get('amount')) || 0;
     if (amount <= 0) { this.ctx.toast('Nominal harus lebih besar dari 0.', 'danger'); return; }
-    const notes = this.ctx.getNotes() || [];
-    const existing = existingId ? notes.find((n) => n.id === existingId) : null;
-    const finance = { type, amount, date: String(data.get('date') || today()), debtTo: String(data.get('debtTo') || '').trim(), debtPurpose: String(data.get('debtPurpose') || '').trim(), debtPaid: Boolean(form.querySelector('[name="debtPaid"]')?.checked), incomeFrom: String(data.get('source') || '').trim(), expenseFor: String(data.get('purpose') || '').trim() };
+    const notes = this.ctx.getNotes() || []; const existing = existingId ? notes.find((n) => n.id === existingId) : null;
+    let funding=[];
+    try { if(type==='expense') funding=this.readFunding(form,amount,existingId); } catch(e) { this.ctx.toast(e.message,'danger'); return; }
+    const oldFunding = existing?.finance?.funding || (type==='expense' ? [{id:'net',amount:Number(existing?.finance?.amount)||0}] : []);
+    if(type==='expense' && existing) this.applySavingsDelta(oldFunding,-1);
+    if(type==='expense') { try { this.applySavingsDelta(funding,-1); } catch(e) { if(existing) this.applySavingsDelta(oldFunding,1); this.ctx.toast(e.message,'danger'); return; } }
+    const finance = { type, amount, date: String(data.get('date') || today()), debtTo: String(data.get('debtTo') || '').trim(), debtPurpose: String(data.get('debtPurpose') || '').trim(), debtPaid: Boolean(form.querySelector('[name="debtPaid"]')?.checked), incomeFrom: String(data.get('source') || '').trim(), expenseFor: String(data.get('purpose') || '').trim(), funding };
     const note = existing ? { ...existing, title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), finance, category: 'keuangan', updatedAt: Date.now() } : { id: uid('note'), title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), category: 'keuangan', finance, reminder: null, eventDate: '', eventLocation: '', attachments: [], createdAt: Date.now(), updatedAt: Date.now() };
     await this.ctx.persistNote(note);
-    document.getElementById('cp104FormModal').classList.remove('open');
-    this.ctx.toast(`${type === 'income' ? 'Pemasukan' : type === 'expense' ? 'Pengeluaran' : 'Hutang'} berhasil disimpan.`, 'info');
+    if(type==='expense') await this.recordFundingHistory('transaction',note.id,existing?'Ubah pengeluaran':'Pengeluaran',amount,funding,{note:String(data.get('purpose')||'').trim()});
+    else await this.recordFundingHistory('transaction',note.id,type==='income'?'Pemasukan':'Hutang',amount,[],{note: type==='income'?String(data.get('source')||'').trim():String(data.get('debtTo')||'').trim()});
+    document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast(`${type === 'income' ? 'Pemasukan' : type === 'expense' ? 'Pengeluaran' : 'Hutang'} berhasil disimpan.`, 'info');
   },
+
+  openObligationPaymentForm(index) {
+    const item=this.obligations[index]; if(!item) return;
+    document.getElementById('cp104FormTitle').textContent=`Bayar Dana Wajib: ${item.name}`;
+    document.getElementById('cp104FormFields').innerHTML=`<label>Nominal<input class="cp104-input" name="amount" type="number" value="${Number(item.amount)||0}" readonly></label>${this.fundingPickerHTML([],Number(item.amount),null)}<label>Catatan pembayaran<textarea class="cp104-input" name="body" rows="3"></textarea></label>`;
+    const form=document.getElementById('cp104Form'); this.bindFundingPicker(form,form.querySelector('[name="amount"]'));
+    form.onsubmit=async(e)=>{e.preventDefault();let funding;try{funding=this.readFunding(form,Number(item.amount),null);this.applySavingsDelta(funding,1*-1);}catch(err){this.ctx.toast(err.message,'danger');return;} item.funding=funding;item.isPaid=true;item.paidAt=Date.now();saveJSON(OBL_KEY,this.obligations);await this.recordFundingHistory('obligation',item.id,'Pembayaran dana wajib',item.amount,funding,{note:String(new FormData(form).get('body')||'')});document.getElementById('cp104FormModal').classList.remove('open');this.renderFinance();this.ctx.toast('Dana wajib dibayar dan sumber dana telah dikurangi.','info');};
+    document.getElementById('cp104FormModal').classList.add('open');
+  },
+
+  unpayObligation(index) {
+    const item=this.obligations[index];if(!item)return;
+    const funding=item.funding || (item.deductFromNet?[{id:'net',amount:item.amount}]:[]);
+    this.applySavingsDelta(funding,1); item.isPaid=false; delete item.paidAt; saveJSON(OBL_KEY,this.obligations); this.recordFundingHistory('obligation',item.id,'Batalkan pembayaran',item.amount,funding,{note:'Saldo tabungan dikembalikan.'}); this.renderFinance();
+  },
+
+
 
   openEventForm(dateValue = today(), existing = null) {
     const note = existing || {};
@@ -339,21 +476,15 @@ export const FeaturePackService = {
   },
 
   addObligation() {
-    const nameEl = document.getElementById('cp104ObName');
-    const amountEl = document.getElementById('cp104ObAmount');
-    const dueEl = document.getElementById('cp104ObDue');
-    const deductEl = document.getElementById('cp104ObDeduct');
-    const name = nameEl.value.trim(); const amount = Number(amountEl.value) || 0;
-    if (!name || amount <= 0) { this.ctx.toast('Nama dan nominal kewajiban wajib diisi.', 'danger'); return; }
-    this.obligations.push({ id: uid('ob'), name, amount, dueDate: dueEl.value || '', deductFromNet: deductEl.checked, isPaid: false, createdAt: Date.now() });
-    saveJSON(OBL_KEY, this.obligations); nameEl.value = ''; amountEl.value = ''; dueEl.value = ''; this.renderFinance();
-    this.ctx.toast('Kewajiban berhasil ditambahkan.', 'info');
+    const nameEl=document.getElementById('cp104ObName'), amountEl=document.getElementById('cp104ObAmount'), dueEl=document.getElementById('cp104ObDue');
+    const name=nameEl.value.trim(), amount=Number(amountEl.value)||0; if(!name||amount<=0){this.ctx.toast('Nama dan nominal kewajiban wajib diisi.','danger');return;}
+    const item={id:uid('ob'),name,amount,dueDate:dueEl.value||'',isPaid:false,createdAt:Date.now(),funding:[]}; this.obligations.push(item); saveJSON(OBL_KEY,this.obligations); nameEl.value='';amountEl.value='';dueEl.value='';this.renderFinance();this.ctx.toast('Kewajiban dibuat. Saat dibayar Anda dapat memilih satu atau beberapa sumber dana.','info');
   },
 
   openSavingsForm() {
     document.getElementById('cp104FormTitle').textContent = 'Tambah Pos Tabungan';
     document.getElementById('cp104FormFields').innerHTML = '<label>Nama pos<input class="cp104-input" name="name" required placeholder="Contoh: Dana darurat"></label><div class="cp104-row"><label>Target (Rp)<input class="cp104-input" name="target" type="number" min="0" value="0"></label><label>Saldo awal (Rp)<input class="cp104-input" name="balance" type="number" min="0" value="0"></label></div><label>Sumber utama (opsional)<input class="cp104-input" name="source" placeholder="Gaji, bonus, dll."></label>';
-    const form = document.getElementById('cp104Form'); form.onsubmit = (e) => { e.preventDefault(); const data = new FormData(form); const name = String(data.get('name') || '').trim(); if (!name) return; this.savings.push({ id: uid('sav'), name, target: Number(data.get('target')) || 0, balance: Number(data.get('balance')) || 0, source: String(data.get('source') || '').trim(), createdAt: Date.now() }); saveJSON(SAV_KEY, this.savings); document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast('Pos tabungan berhasil dibuat.', 'info'); };
+    const form = document.getElementById('cp104Form'); form.onsubmit = (e) => { e.preventDefault(); const data = new FormData(form); const name = String(data.get('name') || '').trim(); if (!name) return; const item={ id: uid('sav'), name, target: Number(data.get('target')) || 0, balance: Number(data.get('balance')) || 0, source: String(data.get('source') || '').trim(), createdAt: Date.now() }; this.savings.push(item); saveJSON(SAV_KEY, this.savings); addHistory({entityType:'savings',entityId:item.id,action:'Pos tabungan dibuat',amount:item.balance,funding:item.balance?[{id:'other',label:item.source||'Saldo awal',amount:item.balance}]:[],note:item.source||'Saldo awal'}); document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast('Pos tabungan berhasil dibuat.', 'info'); };
     document.getElementById('cp104FormModal').classList.add('open'); form.querySelector('[name="name"]').focus();
   },
 
@@ -361,7 +492,7 @@ export const FeaturePackService = {
     if (!this.savings.length) { this.ctx.toast('Buat pos tabungan terlebih dahulu.', 'danger'); return; }
     document.getElementById('cp104FormTitle').textContent = 'Setor / Tarik Tabungan';
     document.getElementById('cp104FormFields').innerHTML = `<label>Pos tabungan<select class="cp104-input" name="index">${this.savings.map((s, i) => `<option value="${i}">${esc(s.name)} — ${rupiah(s.balance)}</option>`).join('')}</select></label><div class="cp104-row"><label>Aksi<select class="cp104-input" name="action"><option value="deposit">Setor</option><option value="withdraw">Tarik</option></select></label><label>Nominal (Rp)<input class="cp104-input" name="amount" type="number" min="1" required value="50000"></label></div>`;
-    const form = document.getElementById('cp104Form'); form.onsubmit = (e) => { e.preventDefault(); const data = new FormData(form); const item = this.savings[Number(data.get('index'))]; const amount = Number(data.get('amount')) || 0; if (!item || amount <= 0) return; if (data.get('action') === 'withdraw' && amount > Number(item.balance || 0)) { this.ctx.toast('Saldo tabungan tidak cukup.', 'danger'); return; } item.balance = Number(item.balance || 0) + (data.get('action') === 'deposit' ? amount : -amount); saveJSON(SAV_KEY, this.savings); document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast('Saldo tabungan diperbarui.', 'info'); };
+    const form = document.getElementById('cp104Form'); form.onsubmit = (e) => { e.preventDefault(); const data = new FormData(form); const item = this.savings[Number(data.get('index'))]; const amount = Number(data.get('amount')) || 0; if (!item || amount <= 0) return; if (data.get('action') === 'withdraw' && amount > Number(item.balance || 0)) { this.ctx.toast('Saldo tabungan tidak cukup.', 'danger'); return; } item.balance = Number(item.balance || 0) + (data.get('action') === 'deposit' ? amount : -amount); saveJSON(SAV_KEY, this.savings); addHistory({entityType:'savings',entityId:item.id,action:data.get('action')==='deposit'?'Setor tabungan':'Tarik tabungan',amount,funding:[{id:item.id,label:item.name,amount}],note:data.get('action')==='deposit'?'Saldo bertambah':'Saldo berkurang'}); document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast('Saldo tabungan diperbarui.', 'info'); };
     document.getElementById('cp104FormModal').classList.add('open');
   },
 
@@ -424,8 +555,8 @@ export const FeaturePackService = {
   },
 
   exportFinance() {
-    const payload = { app: 'Catatan Pintar', version: '1.0.4', exportedAt: new Date().toISOString(), transactions: this.getTx().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })), obligations: this.obligations, savings: this.savings };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = 'catatan-pintar-keuangan-1.0.4.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const payload = { app: 'Catatan Pintar', version: '1.0.5', exportedAt: new Date().toISOString(), transactions: this.getTx().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })), obligations: this.obligations, savings: this.savings, history: loadHistory() };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = 'catatan-pintar-keuangan-1.0.5.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
   buildImageModal() {
