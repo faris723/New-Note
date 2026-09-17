@@ -18,6 +18,7 @@ import { UpdateService } from './modules/update.js';
 import { FileOpenService } from './modules/fileOpen.js';
 import { APP_VERSION } from './version.js';
 import { FeaturePackService } from './modules/featurePack.js';
+import { App as CapacitorApp } from '@capacitor/app';
 
 // Application State
 let notes = [];
@@ -33,6 +34,7 @@ let selectedNoteIds = new Set();
 let recTimerInterval = null;
 let recSeconds = 0;
 let autoDetectCategoryEnabled = true;
+const TOOL_ONLY_CATEGORIES = new Set(['keuangan', 'acara']);
 
 // DOM Elements cache
 const el = {};
@@ -155,6 +157,7 @@ function detectCategoryFromText(text) {
   const lower = text.toLowerCase();
 
   for (const cat of categories) {
+    if (TOOL_ONLY_CATEGORIES.has(cat.id)) continue;
     if (cat.core && Array.isArray(cat.keywords)) {
       for (const kw of cat.keywords) {
         const regex = new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
@@ -169,7 +172,8 @@ function renderCategoryChips() {
   if (!el.chipsRow) return;
   el.chipsRow.innerHTML = '';
 
-  const allCount = notes.length;
+  const visibleNotes = notes.filter(n => !TOOL_ONLY_CATEGORIES.has(n.category));
+  const allCount = visibleNotes.length;
   const allChip = document.createElement('button');
   allChip.className = `chip ${activeCategory === 'all' ? 'active' : ''}`;
   allChip.innerHTML = `✨ Semua <span class="chip-count">${allCount}</span>`;
@@ -180,8 +184,8 @@ function renderCategoryChips() {
   };
   el.chipsRow.appendChild(allChip);
 
-  categories.forEach(cat => {
-    const count = notes.filter(n => n.category === cat.id).length;
+  categories.filter(cat => !TOOL_ONLY_CATEGORIES.has(cat.id)).forEach(cat => {
+    const count = visibleNotes.filter(n => n.category === cat.id).length;
     const chip = document.createElement('button');
     chip.className = `chip ${activeCategory === cat.id ? 'active' : ''}`;
     chip.innerHTML = `${cat.icon || '📁'} ${SecurityService.escapeHtml(cat.name)} <span class="chip-count">${count}</span>`;
@@ -197,7 +201,7 @@ function renderCategoryChips() {
 function populateCategorySelect() {
   if (!el.categorySelect) return;
   el.categorySelect.innerHTML = '';
-  categories.forEach(cat => {
+  categories.filter(cat => !TOOL_ONLY_CATEGORIES.has(cat.id)).forEach(cat => {
     const opt = document.createElement('option');
     opt.value = cat.id;
     opt.textContent = `${cat.icon || '📁'} ${cat.name}`;
@@ -207,7 +211,7 @@ function populateCategorySelect() {
   if (el.filterCategory) {
     const curr = el.filterCategory.value;
     el.filterCategory.innerHTML = '<option value="">Semua Kategori</option>';
-    categories.forEach(cat => {
+    categories.filter(cat => !TOOL_ONLY_CATEGORIES.has(cat.id)).forEach(cat => {
       const opt = document.createElement('option');
       opt.value = cat.id;
       opt.textContent = `${cat.icon || '📁'} ${cat.name}`;
@@ -222,7 +226,7 @@ function populateCategorySelect() {
    ========================================================================== */
 
 function getFilteredNotes() {
-  let list = [...notes];
+  let list = notes.filter(n => !TOOL_ONLY_CATEGORIES.has(n.category));
 
   // Category filter
   if (activeCategory !== 'all') {
@@ -1222,6 +1226,10 @@ function bindEventListeners() {
         catch (restoreErr) { UIService.showToast(restoreErr.message, 'danger'); return; }
         await FeaturePackService.recordFundingHistory('transaction', deletedNote.id, 'Hapus pengeluaran', deletedNote.finance.amount, deletedNote.finance.funding || [], { note: 'Saldo sumber dana internal dikembalikan.' });
       }
+      if (deletedNote?.finance?.type === 'debt' && Array.isArray(deletedNote.finance.payments)) {
+        for (const payment of deletedNote.finance.payments) { try { FeaturePackService.applySavingsDelta(payment.funding || [], 1); } catch (restoreErr) { UIService.showToast(restoreErr.message, 'danger'); return; } }
+        await FeaturePackService.recordFundingHistory('transaction', deletedNote.id, 'Hapus hutang', deletedNote.finance.paidAmount || 0, deletedNote.finance.payments.flatMap(p=>p.funding||[]), { note: 'Saldo sumber dana pembayaran hutang dikembalikan.' });
+      }
       await StorageService.deleteNote(pendingDeleteId);
       notes = notes.filter(n => n.id !== pendingDeleteId);
       pendingDeleteId = null;
@@ -1960,18 +1968,22 @@ async function init() {
   // Cek Pembaruan Aplikasi (otomatis + dapat dipicu manual)
   if (el.updateStatusText) el.updateStatusText.textContent = `Versi saat ini: ${APP_VERSION}`;
   try {
-    UpdateService.init(
-      {
-        updateModalOverlay: el.updateModalOverlay,
-        closeUpdateModalBtn: el.closeUpdateModalBtn,
-        closeUpdateModalLaterBtn: el.closeUpdateModalLaterBtn,
-        updateModalBody: el.updateModalBody,
-        updateDownloadBtn: el.updateDownloadBtn,
-        updateVersionText: el.updateVersionText,
-        updateStatusText: el.updateStatusText
-      },
-      APP_VERSION
-    );
+    const updateElements = {
+      updateModalOverlay: el.updateModalOverlay,
+      closeUpdateModalBtn: el.closeUpdateModalBtn,
+      closeUpdateModalLaterBtn: el.closeUpdateModalLaterBtn,
+      updateModalBody: el.updateModalBody,
+      updateDownloadBtn: el.updateDownloadBtn,
+      updateVersionText: el.updateVersionText,
+      updateStatusText: el.updateStatusText
+    };
+    UpdateService.init(updateElements, APP_VERSION);
+    // Android/WebView kadang baru memiliki koneksi internet beberapa saat setelah startup.
+    // Cek lagi setelah UI siap dan setiap aplikasi kembali ke foreground.
+    setTimeout(() => UpdateService.check(updateElements, APP_VERSION, { silent: false }), 2500);
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) setTimeout(() => UpdateService.check(updateElements, APP_VERSION, { silent: false }), 800);
+    });
   } catch (updErr) {
     console.warn('UpdateService init notice:', updErr);
   }
@@ -2031,7 +2043,10 @@ async function init() {
       getCategories: () => categories,
       openNote: (noteOrId) => {
         const n = typeof noteOrId === 'string' ? notes.find(x => x.id === noteOrId) : noteOrId;
-        if (n) openNoteEditor(n);
+        if (!n) return;
+        if (n.category === 'keuangan' && n.finance) { FeaturePackService.openFinanceForm(n.finance.type || 'expense', n); return; }
+        if (n.category === 'acara') { FeaturePackService.openEventForm(n.eventDate || new Date().toISOString().slice(0,10), n); return; }
+        openNoteEditor(n);
       },
       persistNote: async (note) => {
         const idx = notes.findIndex(n => n.id === note.id);
@@ -2075,6 +2090,9 @@ async function init() {
           if (deletedNote?.finance?.type === 'expense') {
             try { FeaturePackService.applySavingsDelta(deletedNote.finance.funding || [{ id:'net', amount:Number(deletedNote.finance.amount)||0 }], 1); } catch (restoreErr) { console.warn('Gagal mengembalikan sumber dana batch:', restoreErr); }
             await FeaturePackService.recordFundingHistory('transaction', deletedNote.id, 'Hapus pengeluaran batch', deletedNote.finance.amount, deletedNote.finance.funding || [], { note: 'Saldo sumber dana internal dikembalikan.' });
+          }
+          if (deletedNote?.finance?.type === 'debt' && Array.isArray(deletedNote.finance.payments)) {
+            for (const payment of deletedNote.finance.payments) { try { FeaturePackService.applySavingsDelta(payment.funding || [], 1); } catch (restoreErr) { console.warn('Gagal mengembalikan cicilan hutang batch:', restoreErr); } }
           }
           await StorageService.deleteNote(noteId);
         }
