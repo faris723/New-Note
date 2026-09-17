@@ -628,8 +628,8 @@
     /* FABs */
     .fab {
       position: fixed;
-      bottom: 24px;
-      right: 22px;
+      bottom: 78px;
+      right: 18px;
       width: 58px;
       height: 58px;
       border-radius: 50%;
@@ -652,8 +652,8 @@
     }
     .fab-chat {
       position: fixed;
-      bottom: 24px;
-      left: 22px;
+      bottom: 78px;
+      left: 18px;
       width: 58px;
       height: 58px;
       border-radius: 50%;
@@ -679,6 +679,10 @@
       transform: scale(0.95);
       box-shadow: 0 2px 8px rgba(43,42,36,.3);
     }
+    @media (max-width: 650px) {
+      .fab, .fab-chat { bottom: calc(70px + env(safe-area-inset-bottom)); }
+    }
+
     .fab-chat:focus-visible {
       outline: 3px solid var(--slate);
       outline-offset: 3px;
