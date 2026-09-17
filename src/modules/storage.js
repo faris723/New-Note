@@ -205,7 +205,8 @@ export const CORE_CATEGORIES = [
   { id: 'keuangan',  name: 'Keuangan',  color: '#47593f', icon: '💰', core: true, keywords: ['rp', 'bayar', 'beli', 'gaji', 'tagihan', 'transfer', 'uang', 'belanja', 'hutang', 'pengeluaran', 'pemasukan', 'tabungan', 'invoice'] },
   { id: 'ide',       name: 'Ide',       color: '#b8922f', icon: '💡', core: true, keywords: ['ide', 'gagasan', 'konsep', 'rencana bisnis', 'inovasi', 'brainstorm'] },
   { id: 'pribadi',   name: 'Pribadi',   color: '#6b3f52', icon: '❤️', core: true, keywords: ['keluarga', 'teman', 'pribadi', 'curhat', 'perasaan', 'liburan', 'kesehatan'] },
-  { id: 'belajar',   name: 'Belajar',   color: '#2f6b5e', icon: '📚', core: true, keywords: ['belajar', 'kuliah', 'ujian', 'materi', 'tugas kuliah', 'kursus', 'buku', 'skripsi'] }
+  { id: 'belajar',   name: 'Belajar',   color: '#2f6b5e', icon: '📚', core: true, keywords: ['belajar', 'kuliah', 'ujian', 'materi', 'tugas kuliah', 'kursus', 'buku', 'skripsi'] },
+  { id: 'acara',     name: 'Acara',     color: '#b45309', icon: '🎉', core: true, keywords: ['acara', 'agenda', 'jadwal', 'event', 'undangan', 'perayaan', 'pesta', 'ulang tahun', 'pertemuan', 'konser', 'janji'] }
 ];
 
 const DB_VERSION = 2;
