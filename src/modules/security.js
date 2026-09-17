@@ -22,53 +22,45 @@ export const SecurityService = {
     if (!html) return '';
     try {
       const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
+      const doc = parser.parseFromString(String(html), 'text/html');
+      const allowedTags = new Set([
+        'P','BR','DIV','SPAN','B','STRONG','I','EM','U','S','DEL','MARK',
+        'UL','OL','LI','BLOCKQUOTE','PRE','CODE','TABLE','THEAD','TBODY',
+        'TFOOT','TR','TH','TD','HR','H1','H2','H3','H4','H5','H6','IMG'
+      ]);
+      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src']);
+      const nodes = Array.from(doc.body.querySelectorAll('*'));
 
-      // Tags that must be stripped completely
-      const forbiddenTags = [
-        'SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'STYLE',
-        'LINK', 'META', 'BASE', 'APPLET', 'FRAME', 'FRAMESET'
-      ];
-
-      function cleanNode(node) {
-        if (!node) return;
-        if (forbiddenTags.includes(node.nodeName)) {
-          if (node.parentNode) node.parentNode.removeChild(node);
-          return;
+      for (const node of nodes) {
+        if (!allowedTags.has(node.tagName)) {
+          node.replaceWith(...Array.from(node.childNodes));
+          continue;
         }
 
-        // Clean attributes on element nodes
-        if (node.nodeType === Node.ELEMENT_NODE && node.attributes) {
-          for (let i = node.attributes.length - 1; i >= 0; i--) {
-            const attr = node.attributes[i];
-            const attrName = attr.name.toLowerCase();
-            const attrVal = (attr.value || '').toLowerCase().trim();
+        for (const attr of Array.from(node.attributes)) {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || '').trim();
+          const lower = value.toLowerCase();
 
-            // Disallow any inline JavaScript event handlers (onclick, onerror, onload, etc.)
-            if (attrName.startsWith('on')) {
+          if (name.startsWith('on') || !allowedAttrs.has(name)) {
+            node.removeAttribute(attr.name);
+            continue;
+          }
+
+          if (name === 'src') {
+            // Notes must never cause arbitrary network requests. Only embedded
+            // image data is allowed. SVG is deliberately excluded.
+            if (!/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)) {
               node.removeAttribute(attr.name);
-              continue;
-            }
-
-            // Disallow javascript: or data: URIs in resource/link attributes (except safe data:image/)
-            if (['src', 'href', 'action', 'data', 'xlink:href'].includes(attrName)) {
-              if (
-                attrVal.startsWith('javascript:') ||
-                attrVal.startsWith('vbscript:') ||
-                (attrVal.startsWith('data:') && !attrVal.startsWith('data:image/'))
-              ) {
-                node.removeAttribute(attr.name);
-              }
             }
           }
-        }
 
-        // Recursively clean children
-        const children = Array.from(node.childNodes);
-        children.forEach(cleanNode);
+          if (name === 'class' && /(?:url\(|expression\(|javascript:)/i.test(value)) {
+            node.removeAttribute(attr.name);
+          }
+        }
       }
 
-      cleanNode(doc.body);
       return doc.body.innerHTML;
     } catch (e) {
       console.warn('HTML Sanitization fallback:', e);
@@ -90,10 +82,15 @@ export const SecurityService = {
    * Sanitize file names for safe export and archiving.
    */
   sanitizeFileName(name) {
-    return String(name || 'file')
+    let safe = String(name || 'file')
       .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/[\u0000-\u001f]/g, '_')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 80) || 'file';
+      .replace(/^\.+$/, '')
+      .slice(0, 80);
+    if (!safe) safe = 'file';
+    if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(safe)) safe = `_${safe}`;
+    return safe;
   }
 };

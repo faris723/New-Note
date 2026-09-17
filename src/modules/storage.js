@@ -929,6 +929,42 @@ export const StorageService = {
   /**
    * Save a single note: offloads attachments to physical files and persists JSON to device.
    */
+  /**
+   * Save the complete notes/categories collection. This method is intentionally
+   * idempotent and is used by Device Vault link/restore flows.
+   */
+  async saveNotes(notes = [], categories = []) {
+    if (!Array.isArray(notes)) {
+      throw new Error('Daftar catatan tidak valid.');
+    }
+    const customCategories = Array.isArray(categories)
+      ? categories.filter(c => c && !c.core)
+      : [];
+
+    // Process every attachment so the canonical state contains only lightweight
+    // attachment metadata while the binary lives in the attachment store/file.
+    const processedNotes = [];
+    for (const note of notes) {
+      if (!note || !note.id) continue;
+      const processedAttachments = [];
+      for (const att of (Array.isArray(note.attachments) ? note.attachments : [])) {
+        const processed = await saveMediaAttachmentToFile(att, note.id);
+        if (processed) processedAttachments.push(processed);
+      }
+      processedNotes.push({
+        ...note,
+        isPinned: Boolean(note.isPinned),
+        attachments: processedAttachments,
+        updatedAt: note.updatedAt || Date.now()
+      });
+    }
+
+    inMemoryCache.notes = processedNotes;
+    inMemoryCache.categories = customCategories;
+    await saveDataToDevice({ notes: processedNotes, categories: customCategories });
+    return { success: true, count: processedNotes.length };
+  },
+
   async saveNote(note) {
     if (!note || !note.id) return { success: false };
 
