@@ -1654,7 +1654,13 @@ function bindEventListeners() {
     if (!el.vaultStatusText) return;
     if (StorageService.hasActiveFileHandle()) {
       const fileName = StorageService.getActiveFileName() || 'catatan_pintar_vault.json';
-      el.vaultStatusText.innerHTML = `<b style="color:#15803d;">🟢 Terhubung ke Berkas Fisik:</b> <code>${fileName}</code> (Catatan kebal pembersihan browser)`;
+      el.vaultStatusText.replaceChildren();
+      const strong = document.createElement('b');
+      strong.style.color = '#15803d';
+      strong.textContent = '🟢 Terhubung ke Berkas Fisik: ';
+      const code = document.createElement('code');
+      code.textContent = fileName;
+      el.vaultStatusText.append(strong, code, document.createTextNode(' (Catatan kebal pembersihan browser)'));
     } else {
       el.vaultStatusText.innerHTML = '⚪ Belum terhubung ke berkas fisik perangkat.';
     }
