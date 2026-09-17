@@ -1,23 +1,19 @@
 /**
  * In-App Update Checker
  * ----------------------------------------------------------------------
- * Mengecek rilis terbaru di GitHub Releases dan menawarkan tautan unduhan
- * APK langsung dari dalam aplikasi.
+ * Mengecek rilis terbaru di GitHub Releases dan menawarkan APK dari
+ * RELEASE TERSEBUT secara deterministik.
  *
- * Pengecekan HANYA berjalan ketika aplikasi dibuka sebagai APK terpasang
- * (lewat Capacitor), tidak pernah berjalan di tab browser / mode PWA biasa,
- * supaya tidak mengganggu pengguna web dengan link download APK.
+ * Penting: jangan memakai URL "latest/download/..." atau memilih APK
+ * pertama secara acak. URL asset GitHub harus berasal dari release yang
+ * baru saja diperiksa, sehingga APK 1.0.2 tidak tertukar dengan asset lama.
  */
 
-// --- KONFIGURASI: sesuaikan dengan akun & nama repo GitHub Anda ---
 const GITHUB_OWNER = 'faris723';
 const GITHUB_REPO = 'New-Note';
-// -------------------------------------------------------------------
-
 const RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 const DISMISSED_KEY = 'cp_update_dismissed_version';
 
-/** Ubah "v1.2.3" atau "1.2.3" jadi [1,2,3] */
 function parseVersion(v) {
   return String(v || '0')
     .replace(/^v/i, '')
@@ -25,7 +21,6 @@ function parseVersion(v) {
     .map((n) => parseInt(n, 10) || 0);
 }
 
-/** true jika `remote` lebih baru daripada `local` */
 function isNewer(remote, local) {
   const a = parseVersion(remote);
   const b = parseVersion(local);
@@ -39,7 +34,6 @@ function isNewer(remote, local) {
   return false;
 }
 
-/** true hanya jika aplikasi berjalan sebagai APK (Capacitor native), bukan browser/PWA */
 function isRunningInsideApk() {
   try {
     return !!(
@@ -52,21 +46,40 @@ function isRunningInsideApk() {
   }
 }
 
+/**
+ * Pilih asset APK dari release yang sama persis dengan tag yang baru dicek.
+ * app-release.apk diprioritaskan karena workflow release menghasilkan file itu.
+ * app-debug.apk tetap didukung sebagai fallback untuk release lama.
+ */
+function findReleaseApk(release) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const apkAssets = assets.filter((asset) =>
+    String(asset?.name || '').toLowerCase().endsWith('.apk')
+  );
+
+  return (
+    apkAssets.find((asset) => asset.name === 'app-release.apk') ||
+    apkAssets.find((asset) => asset.name === 'app-debug.apk') ||
+    apkAssets[0] ||
+    null
+  );
+}
+
+/** Buat URL changelog untuk versi yang benar, bukan URL compare yang stale. */
+function buildChangelogUrl(currentVersion, remoteVersion) {
+  const currentTag = `v${String(currentVersion).replace(/^v/i, '')}`;
+  const remoteTag = `v${String(remoteVersion).replace(/^v/i, '')}`;
+  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/compare/${currentTag}...${remoteTag}`;
+}
+
 export const UpdateService = {
   currentVersion: '0.0.0',
   latestRelease: null,
 
-  /**
-   * @param {Object} elements - elemen DOM modal (lihat cacheElements di app.js)
-   * @param {string} currentVersion - APP_VERSION dari src/version.js
-   */
   async init(elements = {}, currentVersion) {
     if (currentVersion) this.currentVersion = currentVersion;
 
-    if (!isRunningInsideApk()) {
-      // Diam-diam berhenti di browser/PWA — fitur ini khusus untuk APK.
-      return;
-    }
+    if (!isRunningInsideApk()) return;
 
     const {
       updateModalOverlay,
@@ -78,42 +91,54 @@ export const UpdateService = {
     } = elements;
 
     try {
-      const res = await fetch(RELEASES_API_URL, {
-        headers: { Accept: 'application/vnd.github+json' }
+      const res = await fetch(`${RELEASES_API_URL}?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'Cache-Control': 'no-cache'
+        }
       });
 
-      // Repo belum punya Release sama sekali, atau kena rate-limit —
-      // diamkan saja, jangan ganggu pengguna dengan error.
       if (!res.ok) return;
 
       const release = await res.json();
-      const remoteVersion = (release.tag_name || '').replace(/^v/i, '');
+      const remoteVersion = String(release.tag_name || '').replace(/^v/i, '');
       if (!remoteVersion || !isNewer(remoteVersion, this.currentVersion)) return;
 
-      // Jangan tampilkan lagi kalau pengguna sudah menekan "Nanti Saja"
-      // untuk versi rilis yang sama persis.
       const dismissed = localStorage.getItem(DISMISSED_KEY);
       if (dismissed === remoteVersion) return;
 
-      this.latestRelease = release;
+      const apkAsset = findReleaseApk(release);
+      if (!apkAsset?.browser_download_url) {
+        console.warn('UpdateService: release tidak memiliki APK yang bisa diunduh.', release);
+        return;
+      }
 
-      const apkAsset = (release.assets || []).find(
-        (a) => a.name && a.name.toLowerCase().endsWith('.apk')
-      );
-      const downloadUrl = apkAsset ? apkAsset.browser_download_url : release.html_url;
+      // Simpan release + asset yang benar-benar dipilih. URL ini menunjuk
+      // ke asset pada tag release tertentu, bukan ke "latest" yang ambigu.
+      this.latestRelease = { release, asset: apkAsset };
+      const downloadUrl = apkAsset.browser_download_url;
+      const changelogUrl = buildChangelogUrl(this.currentVersion, remoteVersion);
 
       if (updateVersionText) {
-        updateVersionText.textContent = `Versi ${remoteVersion} tersedia (versi Anda saat ini: ${this.currentVersion})`;
+        updateVersionText.textContent =
+          `Versi ${remoteVersion} tersedia (versi Anda saat ini: ${this.currentVersion})`;
       }
 
       if (updateModalBody) {
-        const notes = (release.body || '').trim();
-        // .textContent (bukan innerHTML) supaya aman dari HTML/script asing
-        updateModalBody.textContent = notes || 'Pembaruan tersedia dengan perbaikan dan peningkatan.';
+        const releaseNotes = String(release.body || '').trim();
+        const safeNotes = releaseNotes
+          .replace(/https?:\/\/github\.com\/faris723\/New-Note\/compare\/[^\s)]+/g, '')
+          .trim();
+
+        updateModalBody.textContent =
+          `${safeNotes || 'Pembaruan tersedia dengan perbaikan dan peningkatan.'}\n\nFull Changelog: ${changelogUrl}`;
       }
 
       if (updateDownloadBtn) {
         updateDownloadBtn.onclick = () => {
+          // Gunakan URL asset dari release yang baru saja diverifikasi.
+          // Jangan pernah menggantinya dengan /releases/latest/download/.
           window.open(downloadUrl, '_blank');
         };
       }
@@ -131,9 +156,7 @@ export const UpdateService = {
         };
       }
 
-      if (updateModalOverlay) {
-        updateModalOverlay.classList.add('open');
-      }
+      if (updateModalOverlay) updateModalOverlay.classList.add('open');
     } catch (err) {
       console.warn('UpdateService check notice:', err);
     }
