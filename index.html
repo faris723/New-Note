@@ -17,13 +17,8 @@
   <link rel="icon" type="image/svg+xml" href="./icon.svg">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
-  <!-- Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Runtime CDN dependencies removed for Tailwind/fonts. CSS and fonts are local/system. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com; object-src 'none'; frame-src 'self' blob:; base-uri 'none'; form-action 'self'">
 
   <style>
     :root {
@@ -52,7 +47,7 @@
       background-image: radial-gradient(circle at 1px 1px, rgba(43,42,36,0.05) 1px, transparent 0);
       background-size: 22px 22px;
       color: var(--ink);
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
@@ -73,7 +68,7 @@
       flex-wrap: wrap;
     }
     header h1 {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-weight: 700;
       font-size: 24px;
       margin: 0;
@@ -91,7 +86,7 @@
       background: var(--card);
       border: 1px solid var(--card-edge);
       color: var(--ink);
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 12px;
       font-weight: 500;
       padding: 7px 12px;
@@ -266,7 +261,7 @@
     }
     .search-tab input {
       width: 100%;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13.5px;
       padding: 10px 34px 10px 36px;
       border: 1px solid var(--card-edge);
@@ -336,7 +331,7 @@
       font-weight: 500;
     }
     .filter-row select, .filter-row input[type=date] {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 12.5px;
       padding: 8px 10px;
       border: 1px solid var(--card-edge);
@@ -527,7 +522,7 @@
       font-weight: 500;
     }
     .note-card .title {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-weight: 600;
       font-size: 17px;
       margin-bottom: 6px;
@@ -622,7 +617,7 @@
       text-align: center;
       padding: 60px 20px;
       color: var(--ink-soft);
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 16px;
       line-height: 1.6;
       background: var(--card);
@@ -739,7 +734,7 @@
       z-index: 10;
     }
     .modal-header-bar h2 {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 18px;
       margin: 0;
       color: var(--ink);
@@ -781,7 +776,7 @@
 
     .modal input#noteTitle {
       width: 100%;
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-weight: 600;
       font-size: 19px;
       padding: 10px 14px;
@@ -805,7 +800,7 @@
       border-top-right-radius: 2px;
     }
     .toolbar button {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 12px;
       background: none;
       border: 1px solid transparent;
@@ -819,7 +814,7 @@
       background: var(--paper);
     }
     .toolbar select {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 11px;
       border: 1px solid var(--card-edge);
       background: #fff;
@@ -858,7 +853,7 @@
       flex-wrap: wrap;
     }
     .category-row select {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13px;
       padding: 8px 10px;
       border: 1px solid var(--card-edge);
@@ -879,7 +874,7 @@
       flex-wrap: wrap;
     }
     .finance-row select, .finance-row input {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13px;
       padding: 9px 10px;
       border: 1px solid var(--card-edge);
@@ -1071,7 +1066,7 @@
     }
 
     .btn {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13px;
       padding: 9px 16px;
       border: none;
@@ -1123,7 +1118,7 @@
     }
     .confirm-box p {
       margin: 0;
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 16px;
       line-height: 1.5;
     }
@@ -1173,7 +1168,7 @@
       background: none;
       border: none;
       color: var(--gold);
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-weight: 600;
       font-size: 12.5px;
       cursor: pointer;
@@ -1233,7 +1228,7 @@
       flex-wrap: wrap;
     }
     .cat-add-row input {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13px;
       padding: 8px 10px;
       border: 1px solid var(--card-edge);
@@ -1259,7 +1254,7 @@
     .cat-edit-row input[type=text] {
       flex: 1;
       min-width: 100px;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 12px;
       padding: 6px 8px;
       border: 1px solid var(--card-edge);
@@ -1340,7 +1335,7 @@
       font-weight: 500;
     }
     .finance-summary .fbox .fvalue {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-weight: 700;
       font-size: 17px;
     }
@@ -1387,7 +1382,7 @@
     }
 
     .debt-section-title {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 14.5px;
       font-weight: 600;
       margin: 14px 0 6px;
@@ -1401,7 +1396,7 @@
       color: var(--ink-soft);
       padding: 2px 8px;
       border-radius: 10px;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
     }
     .debt-table-wrap {
       max-height: 180px;
@@ -1496,7 +1491,7 @@
       background: #fff;
     }
     .viewer-head h2 {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 16px;
       margin: 0 0 2px;
       word-break: break-all;
@@ -1580,7 +1575,7 @@
       align-items: center;
     }
     .chat-head h2 {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 17px;
       margin: 0 0 2px;
     }
@@ -1631,7 +1626,7 @@
     }
     .chat-input-row input {
       flex: 1;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 13px;
       padding: 10px 12px;
       border: 1px solid var(--card-edge);
@@ -1691,7 +1686,7 @@
       flex-wrap: wrap;
     }
     .reminder-inputs input[type="datetime-local"] {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 12px;
       padding: 5px 8px;
       border: 1px solid var(--card-edge);
@@ -1702,7 +1697,7 @@
     .btn-subtle {
       background: #fff;
       border: 1px solid var(--card-edge);
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 11px;
       padding: 5px 8px;
       cursor: pointer;
@@ -1772,7 +1767,7 @@
       background: #fff;
     }
     .sketch-head h2 {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 16px;
       margin: 0 0 2px;
     }
@@ -1799,7 +1794,7 @@
     .sketch-btn {
       background: #fff;
       border: 1px solid var(--card-edge);
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 11.5px;
       padding: 5px 9px;
       border-radius: 2px;
@@ -1913,7 +1908,7 @@
       padding-bottom: 4px;
     }
     .chart-title {
-      font-family: 'Source Serif 4', Georgia, serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-size: 13px;
       font-weight: 600;
       color: var(--ink);
