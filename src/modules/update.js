@@ -75,7 +75,7 @@ export const UpdateService = {
       const candidates = (Array.isArray(releases) ? releases : [])
         .filter((release) => !release?.draft && !release?.prerelease)
         .map((release) => ({ release, version: String(release.tag_name || '').replace(/^v/i, ''), asset: findApk(release) }))
-        .filter((item) => item.version && isNewer(item.version, this.currentVersion) && item.asset?.browser_download_url)
+        .filter((item) => item.version && isNewer(item.version, this.currentVersion))
         .sort((a, b) => compareVersions(b.version, a.version));
 
       const candidate = candidates[0];
@@ -95,8 +95,10 @@ export const UpdateService = {
       if (updateStatusText) updateStatusText.textContent = `Versi terbaru yang tersedia: ${remoteVersion}`;
       if (updateDownloadBtn) {
         updateDownloadBtn.onclick = () => {
-          window.open(candidate.asset.browser_download_url, '_blank', 'noopener,noreferrer');
+          const target = candidate.asset?.browser_download_url || candidate.release?.html_url || RELEASE_PAGE_URL;
+          window.open(target, '_blank', 'noopener,noreferrer');
         };
+        updateDownloadBtn.textContent = candidate.asset ? '⬇️ Unduh Sekarang' : '↗️ Buka Release';
       }
       if (updateModalOverlay) updateModalOverlay.classList.add('open');
       return { available: true, version: remoteVersion, asset: candidate.asset };
