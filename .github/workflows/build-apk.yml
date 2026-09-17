@@ -1,126 +1,95 @@
-name: Build Android APK (Aplikasi Mandiri Tanpa Browser)
+name: Build Android APK
 
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Opsional: isi versi (misal v1.0.2) untuk sekaligus membuat tag + GitHub Release berisi APK ini. Kosongkan jika hanya ingin build APK biasa (artifact saja).'
+        description: "Opsional: versi release, misalnya v1.0.2. Release bridge ini tetap memakai signing key lama agar update tidak perlu uninstall."
         required: false
         type: string
   push:
-    branches:
-      - main
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    tags: ["v*.*.*"]
 
-permissions:
-  contents: write
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-android:
-    name: Build APK
+  build-debug:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.release_tag == '')
+    name: Build debug artifact
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+          bun-version: '1.3.0'
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bunx cap sync android
+      - uses: actions/setup-java@v4
         with:
-          bun-version: latest
-
-      - name: Install Dependencies
-        run: bun install
-
-      - name: Build Web App
-        run: bun run build
-
-      - name: Sync Capacitor Android
-        run: bunx cap sync android
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '21'
-
-      # 1. Membersihkan konfigurasi yang rusak jika ada
-      - name: Clean Up Broken Configurations
-        working-directory: ./android/app
-        run: |
-          if grep -q "configurations.all" build.gradle; then
-            sed -i '/configurations.all/d' build.gradle
-          fi
-
-      # 2. Konfigurasi file pendukung Android
-      - name: Fix Missing Android Configuration Files
-        working-directory: ./android
-        run: |
-          echo "android.useAndroidX=true" > gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
-          
-          echo "include ':app'" > settings.gradle
-          echo "include ':capacitor-cordova-android-plugins'" >> settings.gradle
-          echo "project(':capacitor-cordova-android-plugins').projectDir = new File(rootProject.projectDir, 'capacitor-cordova-android-plugins')" >> settings.gradle
-          echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
-
-          if [ -f "variables.gradle" ]; then
-            sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 24/g' variables.gradle
-          fi
-
-      # 3. Memasang Gradle versi yang kompatibel dengan AGP 8.13.0,
-      #    lalu membuat Gradle Wrapper dengan versi tersebut.
-      #    (Runner GitHub sekarang default ke Gradle 9.7.1, yang TIDAK
-      #    kompatibel dengan AGP 8.13.0 karena internal API yang dipakai
-      #    AGP sudah dihapus di Gradle 9.6+. Jadi kita pin versi Gradle
-      #    dulu sebelum generate wrapper.)
-      - name: Setup Compatible Gradle Version
-        uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-
-      - name: Generate Gradle Wrapper
-        working-directory: ./android
+      - working-directory: android
         run: |
           gradle wrapper --gradle-version 8.13
           chmod +x gradlew
-
-      # 4. Build Android APK menggunakan wrapper
-      - name: Build Android APK
-        working-directory: ./android
-        run: ./gradlew assembleDebug
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v7
+          ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
         with:
-          name: CatatanPintar-app-debug.apk
+          name: CatatanPintar-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # 5. Jika dipicu manual dengan mengisi "release_tag", buat tag Git
-      #    tersebut secara otomatis di repo (menyamai efek "git tag" + "git push").
-      - name: Create Git Tag from Manual Input
+  build-release:
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    name: Build signed release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bunx cap sync android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Generate Gradle wrapper
+        working-directory: android
+        run: |
+          gradle wrapper --gradle-version 8.13
+          chmod +x gradlew
+      - name: Build compatibility release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CatatanPintar-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+      - name: Create manual tag
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "${{ inputs.release_tag }}"
           git push origin "${{ inputs.release_tag }}"
-
-      # 6. Membuat GitHub Release resmi + melampirkan APK sebagai asset,
-      #    supaya bisa dideteksi oleh fitur "cek update" di dalam aplikasi
-      #    (lihat src/modules/update.js). Jalan jika dipicu oleh tag versi
-      #    (push tag) ATAU oleh input manual "release_tag" di atas.
-      - name: Create GitHub Release with APK
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-        uses: softprops/action-gh-release@v3
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
-
