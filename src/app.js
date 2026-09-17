@@ -46,7 +46,7 @@ function cacheElements() {
     'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
     'browserWipedRecoveryBanner', 'quickRestoreVaultBtn', 'dismissRecoveryBannerBtn',
     'openApkInfoBtn', 'apkModalOverlay', 'closeApkModalBtn', 'closeApkModalFootBtn',
-    'updateModalOverlay', 'closeUpdateModalBtn', 'closeUpdateModalLaterBtn', 'updateModalBody', 'updateDownloadBtn', 'updateVersionText',
+    'updateModalOverlay', 'closeUpdateModalBtn', 'closeUpdateModalLaterBtn', 'updateModalBody', 'updateDownloadBtn', 'updateVersionText', 'updateStatusText', 'checkUpdateBtn',
     'vaultStatusBox', 'vaultStatusText', 'linkVaultBtn', 'restoreVaultBtn', 'downloadBackupBtn',
     'searchInput', 'searchClearBtn',
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
@@ -484,6 +484,8 @@ function openNoteEditor(note = null) {
       el.financeRow.style.display = 'flex';
       el.financeType.value = note.finance.type || 'expense';
       el.financeAmount.value = note.finance.amount || '';
+      const financeDateEl = document.getElementById('cp104FinanceDate');
+      if (financeDateEl) financeDateEl.value = note.finance.date || new Date(note.updatedAt || note.createdAt || Date.now()).toISOString().slice(0,10);
       if (note.finance.type === 'debt') {
         el.financeDebtRow.style.display = 'block';
         el.debtTo.value = note.finance.debtTo || '';
@@ -498,12 +500,12 @@ function openNoteEditor(note = null) {
       el.financeAmount.value = '';
     }
 
-    const incomeFromEl = document.getElementById('cp103IncomeFrom');
-    const expenseForEl = document.getElementById('cp103ExpenseFor');
+    const incomeFromEl = document.getElementById('cp104IncomeFrom');
+    const expenseForEl = document.getElementById('cp104ExpenseFor');
     if (incomeFromEl) incomeFromEl.value = note.finance?.incomeFrom || '';
     if (expenseForEl) expenseForEl.value = note.finance?.expenseFor || '';
-    const eventDateEl = document.getElementById('cp103EventDate');
-    const eventLocationEl = document.getElementById('cp103EventLocation');
+    const eventDateEl = document.getElementById('cp104EventDate');
+    const eventLocationEl = document.getElementById('cp104EventLocation');
     if (eventDateEl) eventDateEl.value = note.eventDate || (note.reminder?.datetime ? note.reminder.datetime.slice(0,10) : '');
     if (eventLocationEl) eventLocationEl.value = note.eventLocation || '';
 
@@ -523,15 +525,17 @@ function openNoteEditor(note = null) {
     el.financeRow.style.display = el.categorySelect.value === 'keuangan' ? 'flex' : 'none';
     el.financeDebtRow.style.display = 'none';
     el.financeAmount.value = '';
+    const financeDateEl = document.getElementById('cp104FinanceDate');
+    if (financeDateEl) financeDateEl.value = new Date().toISOString().slice(0,10);
     el.debtTo.value = '';
     el.debtPurpose.value = '';
     el.debtPaid.checked = false;
-    const incomeFromEl = document.getElementById('cp103IncomeFrom');
-    const expenseForEl = document.getElementById('cp103ExpenseFor');
+    const incomeFromEl = document.getElementById('cp104IncomeFrom');
+    const expenseForEl = document.getElementById('cp104ExpenseFor');
     if (incomeFromEl) incomeFromEl.value = '';
     if (expenseForEl) expenseForEl.value = '';
-    const eventDateEl = document.getElementById('cp103EventDate');
-    const eventLocationEl = document.getElementById('cp103EventLocation');
+    const eventDateEl = document.getElementById('cp104EventDate');
+    const eventLocationEl = document.getElementById('cp104EventLocation');
     if (eventDateEl) eventDateEl.value = '';
     if (eventLocationEl) eventLocationEl.value = '';
 
@@ -585,14 +589,20 @@ async function saveCurrentNote() {
   let finance = null;
   if (category === 'keuangan') {
     const amt = parseFloat(el.financeAmount.value) || 0;
+    if (amt <= 0) {
+      UIService.showToast('Nominal transaksi harus lebih besar dari 0.', 'danger');
+      el.financeAmount.focus();
+      return;
+    }
     finance = {
       type: el.financeType.value,
       amount: amt,
+      date: (document.getElementById('cp104FinanceDate')?.value || new Date().toISOString().slice(0,10)),
       debtTo: el.debtTo.value.trim(),
       debtPurpose: el.debtPurpose.value.trim(),
       debtPaid: el.debtPaid.checked,
-      incomeFrom: (document.getElementById('cp103IncomeFrom')?.value || '').trim(),
-      expenseFor: (document.getElementById('cp103ExpenseFor')?.value || '').trim()
+      incomeFrom: (document.getElementById('cp104IncomeFrom')?.value || '').trim(),
+      expenseFor: (document.getElementById('cp104ExpenseFor')?.value || '').trim()
     };
   }
 
@@ -605,10 +615,14 @@ async function saveCurrentNote() {
     };
   }
 
-  const eventDateEl = document.getElementById('cp103EventDate');
-  const eventLocationEl = document.getElementById('cp103EventLocation');
+  const eventDateEl = document.getElementById('cp104EventDate');
+  const eventLocationEl = document.getElementById('cp104EventLocation');
   const eventDate = category === 'acara' ? ((eventDateEl?.value || '').trim() || (el.noteReminderInput.value ? el.noteReminderInput.value.slice(0,10) : '')) : '';
   const eventLocation = category === 'acara' ? (eventLocationEl?.value || '').trim() : '';
+  if (category === 'acara' && !eventDate) {
+    UIService.showToast('Tanggal acara wajib diisi.', 'danger');
+    return;
+  }
 
   const now = Date.now();
   let noteObj;
@@ -656,7 +670,7 @@ async function saveCurrentNote() {
   renderNotesList();
   closeNoteEditor();
   UIService.showToast('Catatan berhasil disimpan.', 'info');
-  document.dispatchEvent(new Event('cp103:refresh'));
+  document.dispatchEvent(new Event('cp104:refresh'));
 }
 
 /* ==========================================================================
@@ -1189,7 +1203,7 @@ function bindEventListeners() {
       renderNotesList();
       await UIService.updateStorageMeter();
       UIService.showToast('Catatan berhasil dihapus.', 'info');
-      document.dispatchEvent(new Event('cp103:refresh'));
+      document.dispatchEvent(new Event('cp104:refresh'));
     }
   };
 
@@ -1663,6 +1677,19 @@ function bindEventListeners() {
     };
   }
 
+  // Pemeriksaan pembaruan manual
+  if (el.checkUpdateBtn) {
+    el.checkUpdateBtn.onclick = async () => {
+      el.checkUpdateBtn.disabled = true;
+      try {
+        const result = await UpdateService.manualCheck();
+        if (!result?.available) UIService.showToast(result?.error ? 'Gagal memeriksa pembaruan.' : `Tidak ada versi lebih baru dari ${APP_VERSION}.`, result?.error ? 'danger' : 'info');
+      } finally {
+        el.checkUpdateBtn.disabled = false;
+      }
+    };
+  }
+
   // APK Standalone Modal
   if (el.openApkInfoBtn) {
     el.openApkInfoBtn.onclick = () => {
@@ -1902,7 +1929,8 @@ async function init() {
     console.warn('PWAService init notice:', pwaErr);
   }
 
-  // Cek Pembaruan Aplikasi (hanya aktif di dalam APK terpasang)
+  // Cek Pembaruan Aplikasi (otomatis + dapat dipicu manual)
+  if (el.updateStatusText) el.updateStatusText.textContent = `Versi saat ini: ${APP_VERSION}`;
   try {
     UpdateService.init(
       {
@@ -1911,7 +1939,8 @@ async function init() {
         closeUpdateModalLaterBtn: el.closeUpdateModalLaterBtn,
         updateModalBody: el.updateModalBody,
         updateDownloadBtn: el.updateDownloadBtn,
-        updateVersionText: el.updateVersionText
+        updateVersionText: el.updateVersionText,
+        updateStatusText: el.updateStatusText
       },
       APP_VERSION
     );
@@ -1967,7 +1996,7 @@ async function init() {
     console.warn('ReminderService notice:', remErr);
   }
 
-  // New feature pack 1.0.3: tabs, finance dashboard, schedule, batch tools, image annotation.
+  // Feature pack 1.0.4: keuangan, jadwal, batch tools, kategori cepat, anotasi gambar.
   try {
     FeaturePackService.init({
       getNotes: () => notes,
@@ -1976,33 +2005,30 @@ async function init() {
         const n = typeof noteOrId === 'string' ? notes.find(x => x.id === noteOrId) : noteOrId;
         if (n) openNoteEditor(n);
       },
-      openFinance: (type) => {
-        openNoteEditor(null);
-        setTimeout(() => {
-          if (el.categorySelect) {
-            el.categorySelect.value = 'keuangan';
-            el.categorySelect.dispatchEvent(new Event('change'));
-          }
-          if (el.financeType) {
-            el.financeType.value = type;
-            el.financeType.dispatchEvent(new Event('change'));
-          }
-        }, 0);
+      persistNote: async (note) => {
+        const idx = notes.findIndex(n => n.id === note.id);
+        if (idx >= 0) notes[idx] = note;
+        else notes.unshift(note);
+        await StorageService.saveNote(note);
+        renderCategoryChips();
+        renderNotesList();
+        await UIService.updateStorageMeter();
+        document.dispatchEvent(new Event('cp104:refresh'));
+        return note;
       },
-      openSchedule: (dateStr) => {
+      deleteNote: async (noteId) => {
+        await StorageService.deleteNote(noteId);
+        notes = notes.filter(n => n.id !== noteId);
+        renderCategoryChips();
+        renderNotesList();
+        await UIService.updateStorageMeter();
+        document.dispatchEvent(new Event('cp104:refresh'));
+      },
+      openNewNoteWithAttachment: (attachment) => {
         openNoteEditor(null);
-        setTimeout(() => {
-          if (el.categorySelect) {
-            el.categorySelect.value = 'acara';
-            el.categorySelect.dispatchEvent(new Event('change'));
-          }
-          const d = String(dateStr || new Date().toISOString().slice(0,10));
-          const eventDateEl = document.getElementById('cp103EventDate');
-          if (eventDateEl) eventDateEl.value = d;
-          if (el.noteReminderInput) el.noteReminderInput.value = `${d}T09:00`;
-          const loc = document.getElementById('cp103EventLocation');
-          if (loc) loc.value = '';
-        }, 0);
+        currentAttachments = [attachment];
+        renderAttachmentsList();
+        UIService.showToast('Lampiran gambar sudah ditambahkan. Isi judul lalu simpan catatan.', 'info');
       },
       addCategory: async (cat) => {
         categories.push(cat);
@@ -2012,14 +2038,14 @@ async function init() {
         if (el.categorySelect) { el.categorySelect.value = cat.id; el.categorySelect.dispatchEvent(new Event('change')); }
         UIService.showToast(`Kategori "${cat.name}" berhasil dibuat.`, 'info');
       },
-      addAttachment: (att) => { currentAttachments.push(att); renderAttachmentsList(); },
       toast: (message, type='info') => UIService.showToast(message, type),
       getSelectedIds: () => Array.from(selectedNoteIds),
       clearSelection: () => { selectedNoteIds.clear(); isSelectMode = false; updateSelectModeUI(); renderNotesList(); },
       batchDelete: async (ids) => {
-        for (const noteId of ids) { await StorageService.deleteNote(noteId); }
+        for (const noteId of ids) await StorageService.deleteNote(noteId);
         notes = notes.filter(n => !ids.includes(n.id));
         renderCategoryChips(); renderNotesList(); await UIService.updateStorageMeter();
+        document.dispatchEvent(new Event('cp104:refresh'));
       },
       batchMove: async (ids, targetCategory) => {
         const target = categories.find(c => c.id === targetCategory);
@@ -2027,12 +2053,13 @@ async function init() {
         for (const noteId of ids) {
           const n = notes.find(x => x.id === noteId);
           if (!n) continue;
-          n.category = targetCategory; n.updatedAt = Date.now();
+          n.category = targetCategory;
+          n.updatedAt = Date.now();
           await StorageService.saveNote(n);
         }
         renderCategoryChips(); renderNotesList();
-      },
-      refresh: () => { renderCategoryChips(); renderNotesList(); }
+        document.dispatchEvent(new Event('cp104:refresh'));
+      }
     });
   } catch (featureErr) {
     console.warn('FeaturePack init notice:', featureErr);
