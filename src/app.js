@@ -17,6 +17,7 @@ import { PWAService } from './modules/pwa.js';
 import { UpdateService } from './modules/update.js';
 import { FileOpenService } from './modules/fileOpen.js';
 import { APP_VERSION } from './version.js';
+import { FeaturePackService } from './modules/featurePack.js';
 
 // Application State
 let notes = [];
@@ -497,6 +498,15 @@ function openNoteEditor(note = null) {
       el.financeAmount.value = '';
     }
 
+    const incomeFromEl = document.getElementById('cp103IncomeFrom');
+    const expenseForEl = document.getElementById('cp103ExpenseFor');
+    if (incomeFromEl) incomeFromEl.value = note.finance?.incomeFrom || '';
+    if (expenseForEl) expenseForEl.value = note.finance?.expenseFor || '';
+    const eventDateEl = document.getElementById('cp103EventDate');
+    const eventLocationEl = document.getElementById('cp103EventLocation');
+    if (eventDateEl) eventDateEl.value = note.eventDate || (note.reminder?.datetime ? note.reminder.datetime.slice(0,10) : '');
+    if (eventLocationEl) eventLocationEl.value = note.eventLocation || '';
+
     currentAttachments = (note.attachments || []).map(a => ({ ...a }));
     el.deleteBtn.style.display = 'inline-block';
     el.exportNoteBtn.style.display = 'inline-block';
@@ -516,6 +526,14 @@ function openNoteEditor(note = null) {
     el.debtTo.value = '';
     el.debtPurpose.value = '';
     el.debtPaid.checked = false;
+    const incomeFromEl = document.getElementById('cp103IncomeFrom');
+    const expenseForEl = document.getElementById('cp103ExpenseFor');
+    if (incomeFromEl) incomeFromEl.value = '';
+    if (expenseForEl) expenseForEl.value = '';
+    const eventDateEl = document.getElementById('cp103EventDate');
+    const eventLocationEl = document.getElementById('cp103EventLocation');
+    if (eventDateEl) eventDateEl.value = '';
+    if (eventLocationEl) eventLocationEl.value = '';
 
     currentAttachments = [];
     currentNoteIsPinned = false;
@@ -572,7 +590,9 @@ async function saveCurrentNote() {
       amount: amt,
       debtTo: el.debtTo.value.trim(),
       debtPurpose: el.debtPurpose.value.trim(),
-      debtPaid: el.debtPaid.checked
+      debtPaid: el.debtPaid.checked,
+      incomeFrom: (document.getElementById('cp103IncomeFrom')?.value || '').trim(),
+      expenseFor: (document.getElementById('cp103ExpenseFor')?.value || '').trim()
     };
   }
 
@@ -584,6 +604,11 @@ async function saveCurrentNote() {
       notified: false
     };
   }
+
+  const eventDateEl = document.getElementById('cp103EventDate');
+  const eventLocationEl = document.getElementById('cp103EventLocation');
+  const eventDate = category === 'acara' ? ((eventDateEl?.value || '').trim() || (el.noteReminderInput.value ? el.noteReminderInput.value.slice(0,10) : '')) : '';
+  const eventLocation = category === 'acara' ? (eventLocationEl?.value || '').trim() : '';
 
   const now = Date.now();
   let noteObj;
@@ -598,6 +623,8 @@ async function saveCurrentNote() {
       isPinned: currentNoteIsPinned,
       finance,
       reminder,
+      eventDate,
+      eventLocation,
       attachments: currentAttachments,
       updatedAt: now
     };
@@ -612,6 +639,8 @@ async function saveCurrentNote() {
       isPinned: currentNoteIsPinned,
       finance,
       reminder,
+      eventDate,
+      eventLocation,
       attachments: currentAttachments,
       createdAt: now,
       updatedAt: now
@@ -627,6 +656,7 @@ async function saveCurrentNote() {
   renderNotesList();
   closeNoteEditor();
   UIService.showToast('Catatan berhasil disimpan.', 'info');
+  document.dispatchEvent(new Event('cp103:refresh'));
 }
 
 /* ==========================================================================
@@ -1159,6 +1189,7 @@ function bindEventListeners() {
       renderNotesList();
       await UIService.updateStorageMeter();
       UIService.showToast('Catatan berhasil dihapus.', 'info');
+      document.dispatchEvent(new Event('cp103:refresh'));
     }
   };
 
@@ -1934,6 +1965,77 @@ async function init() {
     );
   } catch (remErr) {
     console.warn('ReminderService notice:', remErr);
+  }
+
+  // New feature pack 1.0.3: tabs, finance dashboard, schedule, batch tools, image annotation.
+  try {
+    FeaturePackService.init({
+      getNotes: () => notes,
+      getCategories: () => categories,
+      openNote: (noteOrId) => {
+        const n = typeof noteOrId === 'string' ? notes.find(x => x.id === noteOrId) : noteOrId;
+        if (n) openNoteEditor(n);
+      },
+      openFinance: (type) => {
+        openNoteEditor(null);
+        setTimeout(() => {
+          if (el.categorySelect) {
+            el.categorySelect.value = 'keuangan';
+            el.categorySelect.dispatchEvent(new Event('change'));
+          }
+          if (el.financeType) {
+            el.financeType.value = type;
+            el.financeType.dispatchEvent(new Event('change'));
+          }
+        }, 0);
+      },
+      openSchedule: (dateStr) => {
+        openNoteEditor(null);
+        setTimeout(() => {
+          if (el.categorySelect) {
+            el.categorySelect.value = 'acara';
+            el.categorySelect.dispatchEvent(new Event('change'));
+          }
+          const d = String(dateStr || new Date().toISOString().slice(0,10));
+          const eventDateEl = document.getElementById('cp103EventDate');
+          if (eventDateEl) eventDateEl.value = d;
+          if (el.noteReminderInput) el.noteReminderInput.value = `${d}T09:00`;
+          const loc = document.getElementById('cp103EventLocation');
+          if (loc) loc.value = '';
+        }, 0);
+      },
+      addCategory: async (cat) => {
+        categories.push(cat);
+        await StorageService.saveCategories(categories);
+        populateCategorySelect();
+        renderCategoryChips();
+        if (el.categorySelect) { el.categorySelect.value = cat.id; el.categorySelect.dispatchEvent(new Event('change')); }
+        UIService.showToast(`Kategori "${cat.name}" berhasil dibuat.`, 'info');
+      },
+      addAttachment: (att) => { currentAttachments.push(att); renderAttachmentsList(); },
+      toast: (message, type='info') => UIService.showToast(message, type),
+      getSelectedIds: () => Array.from(selectedNoteIds),
+      clearSelection: () => { selectedNoteIds.clear(); isSelectMode = false; updateSelectModeUI(); renderNotesList(); },
+      batchDelete: async (ids) => {
+        for (const noteId of ids) { await StorageService.deleteNote(noteId); }
+        notes = notes.filter(n => !ids.includes(n.id));
+        renderCategoryChips(); renderNotesList(); await UIService.updateStorageMeter();
+      },
+      batchMove: async (ids, targetCategory) => {
+        const target = categories.find(c => c.id === targetCategory);
+        if (!target) throw new Error('Kategori tidak ditemukan.');
+        for (const noteId of ids) {
+          const n = notes.find(x => x.id === noteId);
+          if (!n) continue;
+          n.category = targetCategory; n.updatedAt = Date.now();
+          await StorageService.saveNote(n);
+        }
+        renderCategoryChips(); renderNotesList();
+      },
+      refresh: () => { renderCategoryChips(); renderNotesList(); }
+    });
+  } catch (featureErr) {
+    console.warn('FeaturePack init notice:', featureErr);
   }
 }
 
