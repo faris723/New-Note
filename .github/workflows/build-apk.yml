@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.12 untuk membuat release APK kompatibel dengan versi lama.'
+        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.13 untuk membuat release APK kompatibel dengan versi lama.'
         required: false
         type: string
 
