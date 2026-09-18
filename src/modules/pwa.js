@@ -31,7 +31,7 @@ export const PWAService = {
     // must never appear inside it. app.js replaces this button with
     // "Periksa Pembaruan" after UpdateService is initialized.
     if (isNativeApp) {
-      if (installAppBtn) installAppBtn.style.display = 'inline-flex';
+      if (installAppBtn) { installAppBtn.style.display = 'inline-flex'; installAppBtn.textContent = '🔎 Periksa Pembaruan'; }
       if (installModalOverlay) installModalOverlay.classList.remove('open');
     }
 
@@ -40,7 +40,7 @@ export const PWAService = {
     this.isIOS = /iphone|ipad|ipod/.test(ua);
 
     // If already installed, hide the install button or mark as installed
-    if (this.isInstalled && installAppBtn) {
+    if (this.isInstalled && installAppBtn && !isNativeApp) {
       installAppBtn.style.display = 'none';
     }
 

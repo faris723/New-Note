@@ -162,14 +162,21 @@ export const ExportImportService = {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const portableNotes = await buildPortableNotes(notes);
+    const readArray = (key) => { try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
+    const financeState = {
+      obligations: readArray('cp_obligations_v2'),
+      savings: readArray('cp_savings_v2'),
+      history: readArray('cp_finance_history_v1')
+    };
     const backupData = {
       app: 'Catatan Pintar — Offline',
-      version: '2.1.0',
+      version: '1.0.12',
       exportedAt: now.toISOString(),
       notesCount: portableNotes.length,
       categories: categories.filter(c => !c.core),
       notes: portableNotes,
-      backupFormat: 'portable-v1'
+      financeState,
+      backupFormat: 'portable-v2'
     };
 
     if (format === 'json') {
@@ -378,7 +385,10 @@ export const ExportImportService = {
           amount: Math.max(0, Number(n.finance.amount) || 0),
           debtTo: SecurityService.stripHtml(n.finance.debtTo || ''),
           debtPurpose: SecurityService.stripHtml(n.finance.debtPurpose || ''),
-          debtPaid: Boolean(n.finance.debtPaid)
+          debtPaid: Boolean(n.finance.debtPaid),
+          incomeFrom: SecurityService.stripHtml(n.finance.incomeFrom || ''),
+          expenseFor: SecurityService.stripHtml(n.finance.expenseFor || ''),
+          funding: Array.isArray(n.finance.funding) ? n.finance.funding.map(f => ({ id: String(f?.id || ''), label: SecurityService.stripHtml(f?.label || ''), amount: Math.max(0, Number(f?.amount) || 0) })) : []
         };
       }
 
@@ -424,9 +434,15 @@ export const ExportImportService = {
 
     const categories = Array.isArray(data.categories) ? data.categories : [];
 
+    const financeState = (data.financeState && typeof data.financeState === 'object') ? {
+      obligations: Array.isArray(data.financeState.obligations) ? data.financeState.obligations : [],
+      savings: Array.isArray(data.financeState.savings) ? data.financeState.savings : [],
+      history: Array.isArray(data.financeState.history) ? data.financeState.history : []
+    } : null;
     return {
       notes: sanitizedNotes,
       categories,
+      financeState,
       count: sanitizedNotes.length
     };
   }
