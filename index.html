@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
   <!-- Runtime CDN dependencies removed for Tailwind/fonts. CSS and fonts are local/system. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com; object-src 'none'; frame-src 'self' blob:; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com; object-src 'none'; worker-src 'self' blob: https://cdnjs.cloudflare.com; frame-src 'self' blob:; base-uri 'none'; form-action 'self'">
 
   <style>
     :root {
@@ -1036,6 +1036,13 @@
       background: #fee2e2;
     }
 
+    .cp104-file-picker-input {
+      position: fixed !important; width: 1px !important; height: 1px !important;
+      padding: 0 !important; margin: -1px !important; overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important;
+      border: 0 !important; opacity: 0.01 !important;
+    }
+
     /* Drag & Drop Zone */
     .drop-zone {
       border: 2px dashed var(--card-edge);
@@ -1570,6 +1577,7 @@
     .cp104-edit-table td:focus,.cp104-edit-table th:focus { outline:2px solid var(--moss); outline-offset:-2px; }
     .viewer-pdf-pages { display:flex; flex-direction:column; gap:14px; align-items:center; }
     .viewer-pdf-page { width:min(100%,900px); background:#fff; border:1px solid var(--card-edge); box-shadow:0 2px 8px rgba(0,0,0,.08); padding:8px; }
+    .viewer-pdf-canvas { display:block; max-width:100%; height:auto; background:#fff; }
     .viewer-pdf-page img { display:block; width:100%; height:auto; background:#fff; }
     .viewer-pdf-label { font-size:10px; color:var(--ink-soft); padding:3px 4px 7px; text-align:center; }
     .viewer-fallback, .viewer-loading {
@@ -2200,7 +2208,7 @@
             <span style="font-size:10.5px; color:var(--ink-soft);">Foto otomatis dikompresi agar hemat memori lokal. Maks 25MB per berkas.</span>
           </div>
           <input type="file" id="fileInput" multiple style="display:none;">
-          <input type="file" id="inlineFileInput" multiple style="display:none;">
+          <input type="file" id="inlineFileInput" multiple class="cp104-file-picker-input" aria-hidden="true" tabindex="-1">
         </div>
 
         <div class="attach-status" id="attachStatus"></div>
@@ -2703,6 +2711,7 @@ cd android
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <!-- Modular Application Script -->
   <script type="module" src="./src/app.js"></script>
