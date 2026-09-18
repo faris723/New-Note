@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.9 untuk membuat release APK kompatibel dengan versi lama.'
+        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.10 untuk membuat release APK kompatibel dengan versi lama.'
         required: false
         type: string
 
@@ -20,6 +20,7 @@ jobs:
     name: Build debug APK
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.release_tag == '')
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -32,7 +33,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --package-lock=false --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build web app
         run: npm run build
@@ -40,13 +41,19 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
       - name: Verify fresh web bundle is packaged
+        shell: bash
         run: |
-          BUNDLE=$(find android/app/src/main/assets/public/assets -maxdepth 1 -type f -name 'index-*.js' | head -n 1)
-          test -n "$BUNDLE"
-          grep -q 'cp104ImageBtn' "$BUNDLE"
-          grep -q 'insertFileBtn' "$BUNDLE"
-          grep -q 'cp104-inline-note' "$BUNDLE"
-          grep -q 'cp104FileEditModal' "$BUNDLE"
+          set -euo pipefail
+          ASSET_DIR=android/app/src/main/assets/public/assets
+          test -d "$ASSET_DIR"
+          test -n "$(find "$ASSET_DIR" -maxdepth 1 -type f -name 'index-*.js' -print -quit)"
+          for needle in cp104ImageBtn insertFileBtn cp104-inline-note cp104FileEditModal; do
+            if ! grep -Rqs -- "$needle" "$ASSET_DIR"; then
+              echo "ERROR: fresh Capacitor bundle is missing: $needle"
+              find "$ASSET_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+              exit 1
+            fi
+          done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
 
       - name: Restore required Android project files
@@ -66,15 +73,9 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Generate Gradle wrapper
-        working-directory: android
-        run: |
-          gradle wrapper --gradle-version 8.13
-          chmod +x gradlew
-
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew --no-daemon clean assembleDebug
+        run: gradle --no-daemon --stacktrace clean assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -87,6 +88,7 @@ jobs:
     name: Build compatibility release APK
     if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -99,7 +101,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --package-lock=false --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build web app
         run: npm run build
@@ -108,13 +110,19 @@ jobs:
         run: npx cap sync android
 
       - name: Verify fresh web bundle is packaged
+        shell: bash
         run: |
-          BUNDLE=$(find android/app/src/main/assets/public/assets -maxdepth 1 -type f -name 'index-*.js' | head -n 1)
-          test -n "$BUNDLE"
-          grep -q 'cp104ImageBtn' "$BUNDLE"
-          grep -q 'insertFileBtn' "$BUNDLE"
-          grep -q 'cp104-inline-note' "$BUNDLE"
-          grep -q 'cp104FileEditModal' "$BUNDLE"
+          set -euo pipefail
+          ASSET_DIR=android/app/src/main/assets/public/assets
+          test -d "$ASSET_DIR"
+          test -n "$(find "$ASSET_DIR" -maxdepth 1 -type f -name 'index-*.js' -print -quit)"
+          for needle in cp104ImageBtn insertFileBtn cp104-inline-note cp104FileEditModal; do
+            if ! grep -Rqs -- "$needle" "$ASSET_DIR"; then
+              echo "ERROR: fresh Capacitor bundle is missing: $needle"
+              find "$ASSET_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+              exit 1
+            fi
+          done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
 
       - name: Verify release tag matches app version
@@ -140,15 +148,9 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Generate Gradle wrapper
-        working-directory: android
-        run: |
-          gradle wrapper --gradle-version 8.13
-          chmod +x gradlew
-
       - name: Build compatibility release APK
         working-directory: android
-        run: ./gradlew --no-daemon clean assembleRelease
+        run: gradle --no-daemon --stacktrace clean assembleRelease
 
       - name: Verify APK signature
         run: |
@@ -165,6 +167,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           files: android/app/build/outputs/apk/release/app-release.apk
