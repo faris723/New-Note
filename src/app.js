@@ -514,6 +514,7 @@ function openNoteEditor(note = null) {
     if (eventLocationEl) eventLocationEl.value = note.eventLocation || '';
 
     currentAttachments = (note.attachments || []).map(a => ({ ...a }));
+    removeOrphanInlineAttachmentChips();
     if (note.finance?.type === 'expense') FeaturePackService.setEditorFunding(note.finance.funding || [{id:'net',amount:Number(note.finance.amount)||0}], Number(note.finance.amount)||0, note.id);
     el.deleteBtn.style.display = 'inline-block';
     el.exportNoteBtn.style.display = 'inline-block';
@@ -773,8 +774,13 @@ function renderAttachmentsList() {
     delBtn.innerHTML = '✕';
     delBtn.title = 'Hapus Lampiran';
     delBtn.onclick = () => {
+      const removed = currentAttachments[idx];
+      if (!removed) return;
       currentAttachments.splice(idx, 1);
+      removeInlineAttachmentChips(removed.id);
       renderAttachmentsList();
+      el.noteBody.dispatchEvent(new Event('input', { bubbles: true }));
+      UIService.showToast(`Lampiran "${removed.name || 'berkas'}" dihapus dari catatan.`, 'info');
     };
     right.appendChild(delBtn);
 
@@ -829,6 +835,32 @@ function inlineIconForAttachment(att) {
   return kind === 'image' ? '🖼️' : kind === 'pdf' ? '📄' : kind === 'doc' ? '📑' : kind === 'audio' ? '🎙️' : kind === 'video' ? '🎬' : '📎';
 }
 
+function removeInlineAttachmentChips(attachmentId) {
+  if (!el.noteBody || !attachmentId) return 0;
+  let removed = 0;
+  el.noteBody.querySelectorAll('.cp104-inline-note').forEach((chip) => {
+    if (chip.getAttribute('data-att-id') !== String(attachmentId)) return;
+    const next = chip.nextSibling;
+    chip.remove();
+    if (next && next.nodeType === Node.TEXT_NODE && /^[\u00a0\u200b\s]*$/.test(next.nodeValue || '')) next.remove();
+    removed++;
+  });
+  return removed;
+}
+
+function removeOrphanInlineAttachmentChips() {
+  if (!el.noteBody) return 0;
+  const valid = new Set(currentAttachments.map((a) => String(a.id)));
+  let removed = 0;
+  el.noteBody.querySelectorAll('.cp104-inline-note').forEach((chip) => {
+    if (!valid.has(String(chip.getAttribute('data-att-id') || ''))) {
+      chip.remove();
+      removed++;
+    }
+  });
+  return removed;
+}
+
 function insertInlineAttachment(att, markerId = null) {
   if (!att?.id) return false;
   const icon = inlineIconForAttachment(att);
@@ -850,9 +882,9 @@ async function handleInlineFilesUpload(fileList, markerId = null) {
   for (let i = 0; i < fileList.length; i++) {
     try {
       const att = await fileToAttachment(fileList[i]);
-      currentAttachments.push(att);
       const ok = insertInlineAttachment(att, activeMarker);
       if (!ok) throw new Error('Posisi penyisipan tidak ditemukan.');
+      currentAttachments.push(att);
       inserted++;
       // The insertion function leaves the caret after the chip; create a new
       // bookmark there so the next selected file remains in sequence.
@@ -1287,14 +1319,42 @@ async function previewAttachment(att) {
           wrap.appendChild(page);
         });
         el.viewerBody.appendChild(wrap);
+      } else if (window.pdfjsLib?.getDocument) {
+        // Web/GitHub Pages path: PDF.js gives a consistent in-app preview.
+        const pdfjs = window.pdfjsLib;
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const bytes = new Uint8Array(await AttachmentService.dataURLToArrayBuffer(fullAtt.dataURL));
+        const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+        const wrap = document.createElement('div');
+        wrap.className = 'viewer-pdf-pages';
+        const maxPages = Math.min(pdf.numPages, 20);
+        for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+          const pdfPage = await pdf.getPage(pageNo);
+          const baseViewport = pdfPage.getViewport({ scale: 1 });
+          const scale = Math.min(1.6, 1100 / Math.max(1, baseViewport.width));
+          const viewport = pdfPage.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.className = 'viewer-pdf-canvas';
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          const page = document.createElement('div');
+          page.className = 'viewer-pdf-page';
+          page.innerHTML = `<div class="viewer-pdf-label">Halaman ${pageNo}${pdf.numPages > maxPages && pageNo === maxPages ? ` dari ${pdf.numPages} (maksimal ${maxPages} halaman ditampilkan)` : ''}</div>`;
+          page.appendChild(canvas);
+          wrap.appendChild(page);
+          await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        }
+        el.viewerBody.appendChild(wrap);
       } else {
         const blob = await AttachmentService.dataURLToBlob(fullAtt.dataURL);
         const blobUrl = AttachmentService.createManagedBlobUrl(blob);
-        const frame = document.createElement('object');
-        frame.data = blobUrl;
-        frame.type = 'application/pdf';
+        const frame = document.createElement('iframe');
+        frame.src = blobUrl;
+        frame.title = fullAtt.name || 'PDF';
         frame.className = 'viewer-frame';
-        frame.innerHTML = '<div class="viewer-fallback">Pratinjau PDF menggunakan kemampuan browser. Pada WebView yang tidak memiliki PDF renderer, gunakan tombol Unduh.</div>';
+        frame.setAttribute('allow', 'fullscreen');
         el.viewerBody.appendChild(frame);
       }
     } else if (kind === 'text') {
@@ -1805,6 +1865,10 @@ function bindEventListeners() {
     const id = chip.getAttribute('data-att-id');
     const att = currentAttachments.find((item) => item.id === id);
     if (att) previewAttachment(att);
+    else {
+      chip.remove();
+      UIService.showToast('Sisipan berkas ini sudah tidak memiliki lampiran.', 'info');
+    }
   });
 
   el.categorySelect.onchange = () => {
@@ -1832,10 +1896,23 @@ function bindEventListeners() {
   };
 
   if (el.insertFileBtn && el.inlineFileInput) {
-    el.insertFileBtn.onclick = () => {
+    // Some Android WebViews reject click() on an input with display:none.
+    // Keep the input visually hidden, capture the caret before the native
+    // picker opens, and prefer showPicker() when available.
+    el.inlineFileInput.classList.add('cp104-file-picker-input');
+    const armInlinePicker = () => {
       const markerId = EditorService.createInsertionMarker(el.noteBody);
       el.inlineFileInput.dataset.cp104Marker = markerId || '';
-      el.inlineFileInput.click();
+    };
+    el.insertFileBtn.addEventListener('pointerdown', armInlinePicker);
+    el.insertFileBtn.onclick = () => {
+      if (!el.inlineFileInput.dataset.cp104Marker) armInlinePicker();
+      try {
+        if (typeof el.inlineFileInput.showPicker === 'function') el.inlineFileInput.showPicker();
+        else el.inlineFileInput.click();
+      } catch (_) {
+        el.inlineFileInput.click();
+      }
     };
     el.inlineFileInput.onchange = async (e) => {
       const markerId = el.inlineFileInput.dataset.cp104Marker || null;
