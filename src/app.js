@@ -2003,7 +2003,9 @@ function bindEventListeners() {
       setProgress(25, 'Mengumpulkan catatan dan lampiran…');
       const result = await ExportImportService.exportNotes(targets, categories, fmt);
       setProgress(100, 'Ekspor selesai.');
-      UIService.showToast(`Ekspor ${targets.length} catatan berhasil.`, 'info');
+      const savedLocation = result?.result?.location || (result?.result?.method === 'android-downloads' ? 'Download/Catatan Pintar/' : 'folder unduhan yang dipilih');
+      const formatLabel = fmt === 'pdf' ? 'PDF' : fmt.toUpperCase();
+      UIService.showToast(`Ekspor ${targets.length} catatan ke ${formatLabel} berhasil. Lokasi: ${savedLocation}`, 'info', null, null, 6500);
       setTimeout(() => el.exportOverlay.classList.remove('open'), 700);
       return result;
     } catch (err) {
