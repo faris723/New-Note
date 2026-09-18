@@ -1547,6 +1547,9 @@
       border-radius: 2px;
     }
     .viewer-doc h3, .viewer-table h3 { margin:0 0 10px; font-family:Georgia,'Times New Roman',serif; }
+    .viewer-doc-paper { max-width:820px; margin:0 auto; background:#fff; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,.08); min-height:60vh; font-family:Arial,'Liberation Sans',sans-serif; color:#222; }
+    .viewer-doc-paper h1 { font-size:26px; margin:18px 0 10px; } .viewer-doc-paper h2 { font-size:22px; margin:16px 0 9px; } .viewer-doc-paper h3 { font-size:18px; margin:14px 0 8px; } .viewer-doc-paper h4,.viewer-doc-paper h5,.viewer-doc-paper h6 { margin:12px 0 7px; }
+    .viewer-doc-paper p { min-height:1em; } .viewer-doc-paper table { border-collapse:collapse; width:100%; margin:12px 0; } .viewer-doc-paper td,.viewer-doc-paper th { border:1px solid #bdb7a8; padding:7px 8px; vertical-align:top; } .viewer-doc-paper th { font-weight:700; background:#f4f1e9; }
     .viewer-doc p { margin: 0 0 8px; }
     .viewer-slide { border:1px solid var(--card-edge); background:#fff; padding:12px; margin:0 0 10px; border-radius:2px; }
     .viewer-slide h4 { margin:0 0 8px; font-size:12px; }
@@ -1554,6 +1557,17 @@
     .viewer-table table { border-collapse:collapse; width:100%; min-width:420px; }
     .viewer-table td, .viewer-table th { border:1px solid var(--card-edge); padding:6px 8px; text-align:left; vertical-align:top; font-size:12px; }
     .viewer-note { font-size:10px; color:var(--ink-soft); margin:8px 0 0; }
+    .cp104-file-edit-dialog { width:min(960px,100%); }
+    .cp104-file-editor { width:100%; min-height:52vh; box-sizing:border-box; border:1px solid var(--card-edge,#ddd); border-radius:8px; background:#fff; padding:14px; font:13px/1.65 'IBM Plex Mono',monospace; overflow:auto; }
+    textarea.cp104-file-editor { resize:vertical; }
+    .cp104-doc-editor { font-family:Arial,sans-serif; line-height:1.55; }
+    .cp104-doc-editor h1,.cp104-doc-editor h2,.cp104-doc-editor h3,.cp104-doc-editor h4 { margin:18px 0 8px; }
+    .cp104-doc-editor p { margin:0 0 10px; }
+    .cp104-doc-editor table { width:100%; border-collapse:collapse; margin:10px 0; }
+    .cp104-doc-editor td,.cp104-doc-editor th { border:1px solid #bdb7a8; padding:6px 8px; vertical-align:top; }
+    .cp104-edit-table { border-collapse:collapse; width:100%; min-width:520px; background:#fff; }
+    .cp104-edit-table td,.cp104-edit-table th { border:1px solid #bdb7a8; padding:7px 8px; min-width:80px; }
+    .cp104-edit-table td:focus,.cp104-edit-table th:focus { outline:2px solid var(--moss); outline-offset:-2px; }
     .viewer-pdf-pages { display:flex; flex-direction:column; gap:14px; align-items:center; }
     .viewer-pdf-page { width:min(100%,900px); background:#fff; border:1px solid var(--card-edge); box-shadow:0 2px 8px rgba(0,0,0,.08); padding:8px; }
     .viewer-pdf-page img { display:block; width:100%; height:auto; background:#fff; }
@@ -2450,6 +2464,7 @@
           <div class="viewer-meta" id="viewerFileMeta"></div>
         </div>
         <div style="display:flex; gap:8px; flex-shrink:0;">
+          <button class="btn btn-cancel" id="editViewerBtn" style="display:none">✏️ Edit</button>
           <button class="btn btn-cancel" id="downloadViewerBtn">⭳ Unduh</button>
           <button class="btn btn-cancel" id="closeViewerBtn">Tutup</button>
         </div>
