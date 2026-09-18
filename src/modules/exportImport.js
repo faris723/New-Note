@@ -12,6 +12,124 @@ const MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_IMPORT_NOTES = 10000;
 const MAX_IMPORT_ATTACHMENTS = 20000;
 
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const b of bytes) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function makeStoredZip(entries) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = enc.encode(String(entry.name));
+    const data = entry.data instanceof Uint8Array ? entry.data : enc.encode(String(entry.data ?? ''));
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + name.length);
+    const v = new DataView(local.buffer);
+    v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint16(6, 0x0800, true);
+    v.setUint16(8, 0, true); v.setUint16(10, 0, true); v.setUint16(12, 0, true);
+    v.setUint32(14, crc, true); v.setUint32(18, data.length, true); v.setUint32(22, data.length, true);
+    v.setUint16(26, name.length, true); v.setUint16(28, 0, true); local.set(name, 30);
+    chunks.push(local, data);
+    const c = new Uint8Array(46 + name.length); const cv = new DataView(c.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true); cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, name.length, true);
+    cv.setUint16(30, 0, true); cv.setUint16(32, 0, true); cv.setUint16(34, 0, true); cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true); cv.setUint32(42, offset, true); c.set(name, 46); central.push(c);
+    offset += local.length + data.length;
+  }
+  const centralSize = central.reduce((n, x) => n + x.length, 0);
+  const eocd = new Uint8Array(22); const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, centralSize, true); ev.setUint32(16, offset, true); chunks.push(...central, eocd);
+  return new Blob(chunks, { type: 'application/zip' });
+}
+
+function xmlEscape(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function buildSimpleDocx(html) {
+  const doc = new DOMParser().parseFromString(SecurityService.sanitizeHTML(html), 'text/html');
+  const run = (node, props = {}) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = xmlEscape(node.nodeValue || '');
+      if (!t) return '';
+      return `<w:r>${props.bold || props.italic || props.underline ? `<w:rPr>${props.bold ? '<w:b/>' : ''}${props.italic ? '<w:i/>' : ''}${props.underline ? '<w:u w:val="single"/>' : ''}</w:rPr>` : ''}<w:t xml:space="preserve">${t}</w:t></w:r>`;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName.toLowerCase(); const next = { ...props };
+    if (tag === 'b' || tag === 'strong') next.bold = true;
+    if (tag === 'i' || tag === 'em') next.italic = true;
+    if (tag === 'u') next.underline = true;
+    if (tag === 'br') return '<w:r><w:br/></w:r>';
+    return [...node.childNodes].map(ch => run(ch, next)).join('');
+  };
+  const blocks = [];
+  [...doc.body.childNodes].forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) { if (node.textContent?.trim()) blocks.push(`<w:p>${run(node)}</w:p>`); return; }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'table') {
+      const rows = [...node.querySelectorAll('tr')];
+      blocks.push(`<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr>${rows.map(tr => `<w:tr>${[...tr.children].map(td => `<w:tc><w:p>${run(td)}</w:p></w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`);
+    } else if (['p','div','li','blockquote','pre','h1','h2','h3'].includes(tag)) {
+      const style = /^h([1-3])$/.test(tag) ? `<w:pPr><w:pStyle w:val="Heading${tag.slice(1)}"/></w:pPr>` : '';
+      blocks.push(`<w:p>${style}${run(node) || '<w:r><w:t></w:t></w:r>'}</w:p>`);
+    } else {
+      blocks.push(`<w:p>${run(node)}</w:p>`);
+    }
+  });
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${blocks.join('') || '<w:p><w:r><w:t></w:t></w:r></w:p>'}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>`;
+  const types = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const wrels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  return makeStoredZip([{name:'[Content_Types].xml',data:types},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml},{name:'word/styles.xml',data:styles},{name:'word/_rels/document.xml.rels',data:wrels}]);
+}
+
+function buildSimplePdf(notes) {
+  const lines = [];
+  for (const note of notes) {
+    lines.push(String(note.title || 'Tanpa Judul').toUpperCase());
+    lines.push(`Kategori: ${note.category || 'Umum'}`);
+    lines.push(...SecurityService.stripHtml(note.bodyHTML || '').split(/\r?\n/));
+    lines.push('');
+    lines.push('------------------------------------------------------------');
+    lines.push('');
+  }
+  const clean = (s) => String(s).replace(/[^\x20-\x7E]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const wrapped = [];
+  for (const line of lines) {
+    const text = line || ' ';
+    for (let i = 0; i < text.length; i += 92) wrapped.push(text.slice(i, i + 92));
+  }
+  const perPage = 46; const pages = Math.max(1, Math.ceil(wrapped.length / perPage));
+  const objs = []; const pageIds = []; const contentIds = [];
+  const add = x => { objs.push(x); return objs.length; };
+  const catalog = add(null); const pagesObj = add(null); const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  for (let p = 0; p < pages; p++) {
+    const body = wrapped.slice(p * perPage, (p + 1) * perPage).map((line, i) => `BT /F1 10 Tf 50 ${790 - i * 16} Td (${clean(line)}) Tj ET`).join('\n');
+    contentIds.push(add(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`));
+    pageIds.push(add(null));
+  }
+  for (let i = 0; i < pages; i++) objs[pageIds[i] - 1] = `<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
+  objs[pagesObj - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pages} >>`;
+  objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
+  let out = '%PDF-1.4\n%CatatanPintar\n'; const offsets = [0];
+  for (let i = 0; i < objs.length; i++) { offsets.push(out.length); out += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`; }
+  const xref = out.length; out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`; for (let i = 1; i <= objs.length; i++) out += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`; out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([new TextEncoder().encode(out)], {type:'application/pdf'});
+}
+
 async function buildPortableNotes(notes = []) {
   const portable = [];
   for (const note of (Array.isArray(notes) ? notes : [])) {
@@ -62,51 +180,30 @@ export const ExportImportService = {
     }
 
     if (format === 'zip') {
-      if (!window.JSZip) {
-        throw new Error('Pustaka JSZip belum siap. Silakan periksa koneksi internet saat memuat halaman.');
-      }
-      const zip = new window.JSZip();
-
       // 1. Full portable JSON backup file inside zip. Attachment bytes are
       // embedded in the JSON, so a ZIP remains restorable even if the original
       // device-side attachment files are no longer present.
-      zip.file('cadangan_lengkap.json', JSON.stringify(backupData, null, 2));
-
-      // 2. Readme
-      zip.file('BACA_SAYA.txt', `Arsip Cadangan Catatan Pintar — Offline\nTanggal Ekspor: ${now.toLocaleString('id-ID')}\nJumlah Catatan: ${notes.length}\n\nFolder "dokumen_catatan": Berisi teks catatan yang dapat dibaca langsung.\nFolder "lampiran": Berisi foto, dokumen, rekaman suara, atau sketsa yang terlampir.`);
-
-      // 3. Document folders
-      const docFolder = zip.folder('dokumen_catatan');
-      const attachFolder = zip.folder('lampiran');
-
+      const zipEntries = [
+        { name: 'cadangan_lengkap.json', data: JSON.stringify(backupData, null, 2) },
+        { name: 'BACA_SAYA.txt', data: `Arsip Cadangan Catatan Pintar — Offline\nTanggal Ekspor: ${now.toLocaleString('id-ID')}\nJumlah Catatan: ${notes.length}\n\nFolder \"dokumen_catatan\": Teks catatan.\nFolder \"lampiran\": Berkas lampiran.` }
+      ];
       for (let i = 0; i < portableNotes.length; i++) {
         const note = portableNotes[i];
         const safeTitle = SecurityService.sanitizeFileName(note.title || `catatan_${i + 1}`);
         const plainBody = SecurityService.stripHtml(note.bodyHTML || '');
         const metaHeader = `=== ${note.title || 'Tanpa Judul'} ===\nKategori: ${note.category || 'Umum'}\nDisematkan: ${note.isPinned ? 'Ya' : 'Tidak'}\nDibuat: ${new Date(note.createdAt).toLocaleString('id-ID')}\nDiperbarui: ${new Date(note.updatedAt).toLocaleString('id-ID')}\n${note.finance ? `Transaksi: ${note.finance.type} Rp ${note.finance.amount}\n` : ''}\n----------------------------------------\n\n`;
-
-        docFolder.file(`${String(i + 1).padStart(3, '0')}_${safeTitle}.txt`, metaHeader + plainBody);
-
-        // Attachments
-        if (note.attachments && note.attachments.length > 0) {
-          for (const att of note.attachments) {
-            if (att.dataURL) {
-              try {
-                const comma = att.dataURL.indexOf(',');
-                if (comma !== -1) {
-                  const base64 = att.dataURL.slice(comma + 1);
-                  const attName = SecurityService.sanitizeFileName(att.name || 'lampiran');
-                  attachFolder.file(`${note.id}_${attName}`, base64, { base64: true });
-                }
-              } catch (err) {
-                console.warn('Gagal memaketkan lampiran ke zip:', err);
-              }
-            }
-          }
+        zipEntries.push({ name: `dokumen_catatan/${String(i + 1).padStart(3, '0')}_${safeTitle}.txt`, data: metaHeader + plainBody });
+        for (const att of (note.attachments || [])) {
+          if (!att.dataURL) continue;
+          try {
+            const comma = att.dataURL.indexOf(',');
+            if (comma !== -1) zipEntries.push({ name: `lampiran/${note.id}_${SecurityService.sanitizeFileName(att.name || 'lampiran')}`, data: AttachmentService.dataURLToArrayBuffer(att.dataURL).then(b => new Uint8Array(b)) });
+          } catch (err) { console.warn('Gagal memaketkan lampiran:', err); }
         }
       }
-
-      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const resolvedEntries = [];
+      for (const entry of zipEntries) resolvedEntries.push({ name: entry.name, data: entry.data instanceof Promise ? await entry.data : entry.data });
+      const zipBlob = makeStoredZip(resolvedEntries);
       await AttachmentService.saveOrDownloadBlob(zipBlob, `CatatanPintar_Arsip_${dateStr}.zip`, 'application/zip');
       return { success: true, count: notes.length };
     }
@@ -138,9 +235,9 @@ export const ExportImportService = {
       });
 
       htmlDoc += '</body></html>';
-      const blob = new Blob([htmlDoc], { type: 'application/msword' });
-      await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.doc`, 'application/msword');
-      return { success: true, count: notes.length };
+      const blob = buildSimpleDocx(htmlDoc);
+      const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      return { success: true, count: notes.length, result };
     }
 
     if (format === 'txt') {
@@ -165,8 +262,9 @@ export const ExportImportService = {
     }
 
     if (format === 'pdf') {
-      window.print();
-      return { success: true, count: notes.length };
+      const blob = buildSimplePdf(notes);
+      const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.pdf`, 'application/pdf');
+      return { success: true, count: notes.length, result };
     }
 
     return { success: false, error: 'Format ekspor tidak dikenal' };

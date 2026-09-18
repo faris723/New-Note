@@ -20,11 +20,20 @@ export const PWAService = {
     } = elements;
 
     // 1. Detect Standalone Display Mode (already installed on device)
+    const isNativeApp = Boolean(window.Capacitor?.isNativePlatform?.());
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator && window.navigator.standalone === true);
 
-    this.isInstalled = isStandalone;
+    this.isInstalled = isStandalone || isNativeApp;
+
+    // A native Capacitor APK is already installed; the PWA install workflow
+    // must never appear inside it. app.js replaces this button with
+    // "Periksa Pembaruan" after UpdateService is initialized.
+    if (isNativeApp) {
+      if (installAppBtn) installAppBtn.style.display = 'inline-flex';
+      if (installModalOverlay) installModalOverlay.classList.remove('open');
+    }
 
     // 2. Detect iOS Device
     const ua = (window.navigator && window.navigator.userAgent) ? window.navigator.userAgent.toLowerCase() : '';
@@ -35,6 +44,8 @@ export const PWAService = {
       installAppBtn.style.display = 'none';
     }
 
+    // 3–5. PWA install workflow is only active in browser/PWA, never native APK.
+    if (!isNativeApp) {
     // 3. Capture Chromium/Android beforeinstallprompt event
     window.addEventListener('beforeinstallprompt', (e) => {
       // Prevent automatic mini-infobar
@@ -118,6 +129,8 @@ export const PWAService = {
     }
     if (closeInstallModalFootBtn && installModalOverlay) {
       closeInstallModalFootBtn.onclick = () => installModalOverlay.classList.remove('open');
+    }
+
     }
 
     // 6. Online / Offline Connectivity Monitor

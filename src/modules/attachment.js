@@ -5,6 +5,7 @@
  */
 
 import { SecurityService } from './security.js';
+import { FileExport } from './pdfViewer.js';
 
 export const AttachmentService = {
   // Registry of created Object URLs for active revocation
@@ -243,7 +244,26 @@ export const AttachmentService = {
       }
     }
 
-    // 2. Mobile / Android & Iframe Fallback: Standard Blob URL Download
+    // 2. Native Android: write directly to the user's Download/Catatan Pintar
+    // folder through the small native FileExport plugin. This avoids the
+    // unreliable <a download> behavior of Android WebView for large blobs.
+    try {
+      if (window.Capacitor?.isNativePlatform?.() && FileExport?.saveBase64) {
+        const dataUrl = await this.blobToDataURL(blob);
+        const comma = dataUrl.indexOf(',');
+        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+        const result = await FileExport.saveBase64({
+          name: safeName,
+          mime: mimeType || blob.type || 'application/octet-stream',
+          base64
+        });
+        return { success: true, method: 'android-downloads', uri: result?.uri || null };
+      }
+    } catch (nativeErr) {
+      console.warn('Native Android export fallback:', nativeErr);
+    }
+
+    // 3. Mobile / browser fallback: standard Blob URL download
     try {
       const url = this.createManagedBlobUrl(blob);
       const a = document.createElement('a');
