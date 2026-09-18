@@ -702,6 +702,7 @@
       overflow: hidden;
     }
     .overlay.open { display: flex; }
+    #exportOverlay.open, #importOverlay.open { z-index: 210; align-items: center; padding: max(8px,env(safe-area-inset-top)) 10px max(90px,calc(12px + env(safe-area-inset-bottom))); overflow-y:auto; }
     @media (min-width: 640px) {
       .overlay {
         align-items: center;
@@ -1298,8 +1299,11 @@
       flex-direction: column;
       gap: 14px;
       border-radius: 2px;
-      max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 8px);
+      max-height: min(92dvh, 760px);
+      min-height: 0;
       overflow-y: auto;
+      overscroll-behavior: contain;
+      box-sizing: border-box;
       overscroll-behavior: contain;
     }
     @media (min-width: 640px) {
