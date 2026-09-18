@@ -698,7 +698,8 @@
       align-items: flex-end;
       justify-content: center;
       z-index: 50;
-      padding: 0;
+      padding: max(8px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom));
+      overflow: hidden;
     }
     .overlay.open { display: flex; }
     @media (min-width: 640px) {
@@ -1291,12 +1292,15 @@
       background: var(--card);
       width: 100%;
       max-width: 460px;
-      padding: 22px;
+      padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
       border-top: 4px solid var(--moss);
       display: flex;
       flex-direction: column;
       gap: 14px;
       border-radius: 2px;
+      max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 8px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
     @media (min-width: 640px) {
       .export-modal, .import-modal {
@@ -2002,7 +2006,7 @@
     <header>
       <h1>Catatan Pintar</h1>
       <div class="head-actions">
-        <button class="icon-btn" id="installAppBtn" title="Pasang Catatan Pintar sebagai aplikasi">📲 Pasang Aplikasi</button>
+        <button class="icon-btn" id="installAppBtn" title="Periksa pembaruan aplikasi">🔎 Periksa Pembaruan</button>
         <button class="icon-btn" id="updateBadgeBtn" title="Ada pembaruan aplikasi" style="display:none;">⬆️ Update</button>
         <button class="icon-btn" id="financeBtn">💰 Keuangan</button>
         <button class="icon-btn" id="manageCatBtn">🏷️ Kategori</button>
@@ -2271,8 +2275,12 @@
         <label><input type="radio" name="exportFormat" value="pdf" checked> Dokumen PDF (.pdf)</label>
         <label><input type="radio" name="exportFormat" value="zip"> 📦 Arsip ZIP (.zip) — Termasuk berkas lampiran & dokumen terpisah</label>
         <label><input type="radio" name="exportFormat" value="json"> 💾 Cadangan Data Penuh JSON (.json)</label>
-        <label><input type="radio" name="exportFormat" value="word"> Dokumen Word (.doc)</label>
+        <label><input type="radio" name="exportFormat" value="word"> Dokumen Word (.docx)</label>
         <label><input type="radio" name="exportFormat" value="txt"> Berkas Teks (.txt)</label>
+      </div>
+      <div id="exportProgressWrap" style="display:none;">
+        <div style="height:8px; background:#eee8da; border:1px solid var(--card-edge); border-radius:6px; overflow:hidden;"><div id="exportProgressBar" style="width:0%; height:100%; background:var(--moss); transition:width .15s;"></div></div>
+        <div id="exportProgressText" class="text-xs text-[var(--ink-soft)]" style="margin-top:5px;">0%</div>
       </div>
       <div class="modal-actions" style="justify-content: flex-end;">
         <button class="btn btn-cancel" id="cancelExportBtn">Batal</button>
@@ -2296,7 +2304,7 @@
         <div class="drop-zone-text">
           📥 <b>Pilih atau seret berkas .json, .zip, atau .cnote ke sini</b>
         </div>
-        <input type="file" id="importFileInput" accept=".json,.zip,.cnote,application/json,application/zip,application/x-zip-compressed" style="display:none;">
+        <input type="file" id="importFileInput" class="cp104-file-picker-input" accept=".json,.zip,.cnote,application/json,application/zip,application/x-zip-compressed">
       </div>
 
       <div id="importFileInfo" style="display:none;" class="text-xs p-3 bg-white border border-[var(--card-edge)] rounded">
@@ -2310,7 +2318,11 @@
         <label><input type="radio" name="importMode" value="replace"> <b>Ganti Semua</b> — Hapus catatan saat ini dan ganti dengan cadangan</label>
       </div>
 
-      <div class="status-msg" id="importStatusMsg"></div>
+      <div class="status-msg" id="importStatusMsg" aria-live="polite"></div>
+      <div id="importProgressWrap" style="display:none;">
+        <div style="height:8px; background:#eee8da; border:1px solid var(--card-edge); border-radius:6px; overflow:hidden;"><div id="importProgressBar" style="width:0%; height:100%; background:var(--moss); transition:width .15s;"></div></div>
+        <div id="importProgressText" class="text-xs text-[var(--ink-soft)]" style="margin-top:5px;">0%</div>
+      </div>
 
       <div class="modal-actions" style="justify-content: flex-end;">
         <button class="btn btn-cancel" id="cancelImportBtn">Batal</button>
