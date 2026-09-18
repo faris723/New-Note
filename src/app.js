@@ -19,6 +19,7 @@ import { FileOpenService } from './modules/fileOpen.js';
 import { APP_VERSION } from './version.js';
 import { FeaturePackService } from './modules/featurePack.js';
 import { App as CapacitorApp } from '@capacitor/app';
+import { PdfViewer } from './modules/pdfViewer.js';
 
 // Application State
 let notes = [];
@@ -64,8 +65,8 @@ function cacheElements() {
     'statusMsg', 'saveBtn', 'cancelBtn', 'exportNoteBtn', 'deleteBtn',
     'confirmOverlay', 'confirmMsg', 'confirmCancelBtn', 'confirmOkBtn',
     'catOverlay', 'catList', 'newCatIcon', 'newCatInput', 'newCatColor', 'addCatBtn', 'closeCatBtn',
-    'exportOverlay', 'closeExportModalBtn', 'exportCountText', 'cancelExportBtn', 'doExportBtn',
-    'importOverlay', 'closeImportModalBtn', 'importDropZone', 'importFileInput', 'importFileInfo', 'importFileName', 'importFileSize', 'importFileStats', 'importStatusMsg', 'cancelImportBtn', 'doImportBtn',
+    'exportOverlay', 'closeExportModalBtn', 'exportCountText', 'cancelExportBtn', 'doExportBtn', 'exportProgressWrap', 'exportProgressBar', 'exportProgressText',
+    'importOverlay', 'closeImportModalBtn', 'importDropZone', 'importFileInput', 'importFileInfo', 'importFileName', 'importFileSize', 'importFileStats', 'importStatusMsg', 'importProgressWrap', 'importProgressBar', 'importProgressText', 'cancelImportBtn', 'doImportBtn',
     'financeOverlay', 'closeFinanceTopBtn', 'financeFrom', 'financeTo', 'financeSummary', 'financeChartsWrap', 'donutChartContainer', 'barChartContainer', 'financeTxList', 'debtUnpaidCount', 'debtUnpaidList', 'debtPaidCount', 'debtPaidList', 'exportFinanceBtn', 'closeFinanceBtn',
     'sketchOverlay', 'closeSketchBtn', 'sketchToolPen', 'sketchToolBrush', 'sketchToolEraser', 'sketchSize', 'sketchSizeVal', 'sketchPalette', 'sketchCustomColor', 'sketchUndoBtn', 'sketchRedoBtn', 'sketchClearBtn', 'sketchStage', 'sketchCanvas', 'cancelSketchBtn', 'insertSketchBtn',
     'reminderAlertOverlay', 'reminderAlertTitle', 'reminderAlertBody', 'reminderAlertDismissBtn', 'reminderAlertOpenBtn',
@@ -1300,7 +1301,7 @@ async function previewAttachment(att) {
       audio.className = 'w-full my-6';
       el.viewerBody.appendChild(audio);
     } else if (kind === 'pdf') {
-      const pdfPlugin = window.Capacitor?.Plugins?.PdfViewer;
+      const pdfPlugin = PdfViewer;
       if (window.Capacitor?.isNativePlatform?.() && pdfPlugin?.render) {
         const base64 = String(fullAtt.dataURL).split(',')[1] || '';
         const result = await pdfPlugin.render({ base64 });
@@ -1987,16 +1988,31 @@ function bindEventListeners() {
   el.cancelExportBtn.onclick = () => el.exportOverlay.classList.remove('open');
 
   el.doExportBtn.onclick = async () => {
-    const fmt = document.querySelector('input[name="exportFormat"]:checked').value;
+    const fmt = document.querySelector('input[name="exportFormat"]:checked')?.value || 'json';
     const targets = isSelectMode && selectedNoteIds.size > 0 ? notes.filter(n => selectedNoteIds.has(n.id)) : notes;
-
+    const setProgress = (pct, text) => {
+      if (el.exportProgressWrap) el.exportProgressWrap.style.display = 'block';
+      if (el.exportProgressBar) el.exportProgressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      if (el.exportProgressText) el.exportProgressText.textContent = text || `${pct}%`;
+    };
     try {
-      el.exportOverlay.classList.remove('open');
+      el.doExportBtn.disabled = true;
+      el.cancelExportBtn.disabled = true;
+      setProgress(5, 'Menyiapkan data…');
       UIService.showToast('Menyiapkan berkas ekspor…', 'info');
-      await ExportImportService.exportNotes(targets, categories, fmt);
-      UIService.showToast(`Ekspor ${targets.length} catatan berhasil!`, 'info');
+      setProgress(25, 'Mengumpulkan catatan dan lampiran…');
+      const result = await ExportImportService.exportNotes(targets, categories, fmt);
+      setProgress(100, 'Ekspor selesai.');
+      UIService.showToast(`Ekspor ${targets.length} catatan berhasil.`, 'info');
+      setTimeout(() => el.exportOverlay.classList.remove('open'), 700);
+      return result;
     } catch (err) {
+      setProgress(0, 'Ekspor gagal.');
       UIService.showToast('Gagal ekspor: ' + err.message, 'danger');
+    } finally {
+      el.doExportBtn.disabled = false;
+      el.cancelExportBtn.disabled = false;
+      setTimeout(() => { if (el.exportProgressWrap) el.exportProgressWrap.style.display = 'none'; }, 900);
     }
   };
 
@@ -2005,6 +2021,9 @@ function bindEventListeners() {
     pendingImportData = null;
     el.importFileInfo.style.display = 'none';
     el.importStatusMsg.textContent = '';
+    el.importProgressWrap.style.display = 'none';
+    el.importProgressBar.style.width = '0%';
+    el.importProgressText.textContent = '0%';
     el.doImportBtn.disabled = true;
     el.importOverlay.classList.add('open');
   };
@@ -2012,69 +2031,100 @@ function bindEventListeners() {
   el.closeImportModalBtn.onclick = () => el.importOverlay.classList.remove('open');
   el.cancelImportBtn.onclick = () => el.importOverlay.classList.remove('open');
 
-  el.importDropZone.onclick = () => el.importFileInput.click();
+  const openImportPicker = () => {
+    try {
+      if (el.importFileInput?.showPicker) el.importFileInput.showPicker();
+      else el.importFileInput?.click();
+    } catch (_) { el.importFileInput?.click(); }
+  };
+  el.importDropZone.onclick = openImportPicker;
   el.importFileInput.onchange = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-
     try {
-      el.importStatusMsg.textContent = 'Membaca dan memverifikasi data…';
+      el.importStatusMsg.textContent = '⏳ Membaca dan memverifikasi cadangan…';
       el.importStatusMsg.className = 'status-msg';
-
+      el.importProgressWrap.style.display = 'block';
+      el.importProgressBar.style.width = '10%';
+      el.importProgressText.textContent = '10% — Membaca berkas';
       pendingImportData = await ExportImportService.parseBackupFile(file);
-
+      el.importProgressBar.style.width = '35%';
+      el.importProgressText.textContent = '35% — Validasi selesai';
       el.importFileName.textContent = file.name;
       el.importFileSize.textContent = AttachmentService.formatSize(file.size);
       el.importFileStats.textContent = `✓ Berisi ${pendingImportData.count} catatan & ${pendingImportData.categories.length} kategori kustom.`;
       el.importFileInfo.style.display = 'block';
       el.doImportBtn.disabled = false;
-      el.importStatusMsg.textContent = 'Berkas valid dan siap diimpor.';
+      el.importStatusMsg.textContent = '✓ Berkas valid. Pilih metode lalu tekan Mulai Impor.';
     } catch (err) {
+      pendingImportData = null;
       el.importStatusMsg.textContent = 'Berkas tidak valid: ' + err.message;
       el.importStatusMsg.className = 'status-msg danger';
       el.doImportBtn.disabled = true;
+      el.importProgressWrap.style.display = 'none';
+    } finally {
+      e.target.value = '';
     }
   };
 
   el.doImportBtn.onclick = async () => {
     if (!pendingImportData) return;
-    const mode = document.querySelector('input[name="importMode"]:checked').value;
-
+    const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'merge';
+    const incoming = pendingImportData.notes || [];
     try {
+      el.doImportBtn.disabled = true;
+      el.cancelImportBtn.disabled = true;
+      el.importProgressWrap.style.display = 'block';
+      el.importProgressBar.style.width = '45%';
+      el.importProgressText.textContent = `45% — Menyiapkan ${incoming.length} catatan`;
+      el.importStatusMsg.className = 'status-msg';
+      el.importStatusMsg.textContent = mode === 'replace' ? 'Menghapus data lama dan menyiapkan cadangan…' : 'Menggabungkan cadangan dengan data saat ini…';
+
       if (mode === 'replace') {
-        notes = pendingImportData.notes;
+        const oldIds = notes.map(n => n.id);
+        for (let i = 0; i < oldIds.length; i++) {
+          await StorageService.deleteNote(oldIds[i]);
+          if (i % 3 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+        notes = [...incoming];
+        categories = [...CORE_CATEGORIES];
       } else {
-        // Merge: avoid duplicates by ID
         const existingIds = new Set(notes.map(n => n.id));
-        const newNotes = pendingImportData.notes.filter(n => !existingIds.has(n.id));
+        const newNotes = incoming.filter(n => !existingIds.has(n.id));
         notes = newNotes.concat(notes);
       }
 
-      // Save all imported notes into IndexedDB
-      for (const note of notes) {
-        await StorageService.saveNote(note);
-      }
+      // Persist in one canonical transaction path; saveNotes also offloads attachment bytes.
+      await StorageService.saveNotes(notes, categories);
+      el.importProgressBar.style.width = '82%';
+      el.importProgressText.textContent = '82% — Menyimpan lampiran dan data';
 
-      // Save custom categories
       if (pendingImportData.categories && pendingImportData.categories.length > 0) {
         const mergedCats = [...categories];
         pendingImportData.categories.forEach(newCat => {
-          if (!mergedCats.some(c => c.id === newCat.id)) {
-            mergedCats.push(newCat);
-          }
+          if (!mergedCats.some(c => c.id === newCat.id)) mergedCats.push(newCat);
         });
         categories = mergedCats;
         await StorageService.saveCategories(categories);
       }
 
-      el.importOverlay.classList.remove('open');
+      el.importProgressBar.style.width = '100%';
+      el.importProgressText.textContent = '100% — Impor selesai';
+      el.importStatusMsg.textContent = `✓ Impor selesai: ${incoming.length} catatan diproses.`;
       renderCategoryChips();
       populateCategorySelect();
       renderNotesList();
       await UIService.updateStorageMeter();
-      UIService.showToast(`Berhasil mengimpor ${pendingImportData.count} catatan.`, 'info');
+      UIService.showToast(`Berhasil mengimpor ${incoming.length} catatan.`, 'info');
+      pendingImportData = null;
+      setTimeout(() => el.importOverlay.classList.remove('open'), 900);
     } catch (err) {
+      el.importStatusMsg.textContent = 'Gagal memproses impor: ' + err.message;
+      el.importStatusMsg.className = 'status-msg danger';
       UIService.showToast('Gagal memproses impor: ' + err.message, 'danger');
+    } finally {
+      el.doImportBtn.disabled = !pendingImportData;
+      el.cancelImportBtn.disabled = false;
     }
   };
 
@@ -2502,6 +2552,23 @@ async function init() {
       }
       return result;
     };
+    const isNativeApp = Boolean(window.Capacitor?.isNativePlatform?.());
+    if (el.installAppBtn && isNativeApp) {
+      el.installAppBtn.style.display = 'inline-flex';
+      el.installAppBtn.textContent = '🔎 Periksa Pembaruan';
+      el.installAppBtn.title = 'Periksa versi terbaru di GitHub';
+      el.installAppBtn.onclick = async () => {
+        el.installAppBtn.disabled = true;
+        el.installAppBtn.textContent = '⏳ Memeriksa…';
+        try {
+          const result = await UpdateService.manualCheck();
+          if (!result?.available) UIService.showToast(result?.error ? 'Pemeriksaan pembaruan gagal.' : `Anda sudah menggunakan versi ${APP_VERSION}.`, result?.error ? 'danger' : 'info');
+        } finally {
+          el.installAppBtn.disabled = false;
+          el.installAppBtn.textContent = '🔎 Periksa Pembaruan';
+        }
+      };
+    }
     UpdateService.init(updateElements, APP_VERSION).then((result) => {
       if (result?.available && !result.dismissed && el.updateBadgeBtn) {
         el.updateBadgeBtn.style.display = 'inline-flex';
