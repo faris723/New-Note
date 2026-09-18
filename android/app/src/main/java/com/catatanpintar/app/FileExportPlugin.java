@@ -60,6 +60,7 @@ public class FileExportPlugin extends Plugin {
             result.put("success", true);
             result.put("uri", uri.toString());
             result.put("name", name);
+            result.put("location", "Download/Catatan Pintar/" + name);
             result.put("size", bytes.length);
             call.resolve(result);
         } catch (Exception e) {
