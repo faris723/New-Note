@@ -70,7 +70,7 @@ function cacheElements() {
     'sketchOverlay', 'closeSketchBtn', 'sketchToolPen', 'sketchToolBrush', 'sketchToolEraser', 'sketchSize', 'sketchSizeVal', 'sketchPalette', 'sketchCustomColor', 'sketchUndoBtn', 'sketchRedoBtn', 'sketchClearBtn', 'sketchStage', 'sketchCanvas', 'cancelSketchBtn', 'insertSketchBtn',
     'reminderAlertOverlay', 'reminderAlertTitle', 'reminderAlertBody', 'reminderAlertDismissBtn', 'reminderAlertOpenBtn',
     'chatOverlay', 'closeChatBtn', 'chatMessages', 'chatInput', 'chatSendBtn',
-    'viewerOverlay', 'viewerFileName', 'viewerFileMeta', 'downloadViewerBtn', 'closeViewerBtn', 'viewerBody',
+    'viewerOverlay', 'viewerFileName', 'viewerFileMeta', 'downloadViewerBtn', 'editViewerBtn', 'closeViewerBtn', 'viewerBody',
     'toastContainer', 'printArea'
   ];
   ids.forEach(id => {
@@ -580,6 +580,7 @@ function updateEditorPinUI() {
 
 function closeNoteEditor() {
   AttachmentService.revokeAllBlobUrls();
+  EditorService.clearInsertionMarker?.();
   AudioVoiceService.stopAudioRecording();
   AudioVoiceService.stopSpeechRecognition();
   resetVoiceRecordingUI();
@@ -758,6 +759,15 @@ function renderAttachmentsList() {
     viewBtn.onclick = () => previewAttachment(att);
     right.appendChild(viewBtn);
 
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.innerHTML = '✏️';
+    editBtn.title = 'Edit Berkas';
+    editBtn.onclick = () => editAttachment(att);
+    const editKind = AttachmentService.classifyAttachment(att);
+    if (!['image','text','doc'].includes(editKind)) editBtn.style.display = 'none';
+    right.appendChild(editBtn);
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.innerHTML = '✕';
@@ -814,31 +824,44 @@ async function fileToAttachment(file) {
   };
 }
 
-function insertInlineAttachment(att) {
-  if (!att?.id) return;
-  const icon = AttachmentService.classifyAttachment(att) === 'image' ? '🖼️'
-    : AttachmentService.classifyAttachment(att) === 'pdf' ? '📄'
-    : AttachmentService.classifyAttachment(att) === 'doc' ? '📑'
-    : AttachmentService.classifyAttachment(att) === 'audio' ? '🎙️' : '📎';
-  const label = SecurityService.escapeHtml(att.name || 'Berkas');
-  const html = `<span class="cp104-inline-note" contenteditable="false" data-att-id="${SecurityService.escapeHtml(att.id)}" title="Ketuk untuk melihat berkas">${icon} ${label} <small>lihat</small></span>&nbsp;`;
-  EditorService.restoreSelection(el.noteBody);
-  EditorService.insertHtmlAtCursor(el.noteBody, html);
+function inlineIconForAttachment(att) {
+  const kind = AttachmentService.classifyAttachment(att);
+  return kind === 'image' ? '🖼️' : kind === 'pdf' ? '📄' : kind === 'doc' ? '📑' : kind === 'audio' ? '🎙️' : kind === 'video' ? '🎬' : '📎';
 }
 
-async function handleInlineFilesUpload(fileList) {
-  if (!fileList || fileList.length === 0) return;
+function insertInlineAttachment(att, markerId = null) {
+  if (!att?.id) return false;
+  const icon = inlineIconForAttachment(att);
+  const label = SecurityService.escapeHtml(att.name || 'Berkas');
+  const html = `<span class="cp104-inline-note" contenteditable="false" data-att-id="${SecurityService.escapeHtml(att.id)}" title="Ketuk untuk melihat berkas">${icon} ${label} <small>lihat</small></span>&nbsp;`;
+  if (markerId && EditorService.insertHtmlAtMarker(el.noteBody, markerId, html)) return true;
+  EditorService.restoreSelection(el.noteBody);
+  EditorService.insertHtmlAtCursor(el.noteBody, html);
+  return true;
+}
+
+async function handleInlineFilesUpload(fileList, markerId = null) {
+  if (!fileList || fileList.length === 0) {
+    if (markerId) EditorService.removeInsertionMarker(el.noteBody, markerId);
+    return;
+  }
   let inserted = 0;
+  let activeMarker = markerId;
   for (let i = 0; i < fileList.length; i++) {
     try {
       const att = await fileToAttachment(fileList[i]);
       currentAttachments.push(att);
-      insertInlineAttachment(att);
+      const ok = insertInlineAttachment(att, activeMarker);
+      if (!ok) throw new Error('Posisi penyisipan tidak ditemukan.');
       inserted++;
+      // The insertion function leaves the caret after the chip; create a new
+      // bookmark there so the next selected file remains in sequence.
+      activeMarker = EditorService.createInsertionMarker(el.noteBody);
     } catch (err) {
       UIService.showToast(`Gagal menyisipkan berkas "${fileList[i]?.name || 'file'}": ${err.message}`, 'danger');
     }
   }
+  if (activeMarker) EditorService.removeInsertionMarker(el.noteBody, activeMarker);
   renderAttachmentsList();
   if (inserted) UIService.showToast(`${inserted} berkas disisipkan ke dalam teks catatan.`, 'info');
 }
@@ -932,11 +955,43 @@ async function previewOfficeOpenXml(fullAtt, kind) {
     const xml = await zip.read('word/document.xml');
     if (!xml) throw new Error('Isi dokumen Word tidak ditemukan.');
     const doc = xmlDocument(xml);
-    const blocks = [...doc.getElementsByTagNameNS('*', 'p')].map((p) => {
-      const text = [...p.getElementsByTagNameNS('*', 't')].map(xmlText).join('');
-      return text;
-    }).filter(Boolean);
-    return `<div class="viewer-doc"><h3>Pratinjau Word</h3>${blocks.length ? blocks.map((t) => `<p>${SecurityService.escapeHtml(t)}</p>`).join('') : '<p>Dokumen tidak memiliki teks yang dapat ditampilkan.</p>'}</div>`;
+    const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const runsToHtml = (parent) => [...parent.children].map((runNode) => {
+      if (runNode.localName !== 'r') return '';
+      const textNodes = [...runNode.getElementsByTagNameNS(ns, 't')];
+      const text = textNodes.map(n => String(n.textContent || '')).join('');
+      if (!text && !runNode.getElementsByTagNameNS(ns, 'br').length) return '';
+      const rPr = runNode.getElementsByTagNameNS(ns, 'rPr')[0];
+      const bold = !!rPr?.getElementsByTagNameNS(ns, 'b').length;
+      const italic = !!rPr?.getElementsByTagNameNS(ns, 'i').length;
+      const underline = !!rPr?.getElementsByTagNameNS(ns, 'u').length;
+      const strike = !!rPr?.getElementsByTagNameNS(ns, 'strike').length;
+      let html = SecurityService.escapeHtml(text);
+      if (runNode.getElementsByTagNameNS(ns, 'br').length) html += '<br>';
+      if (bold) html = `<strong>${html}</strong>`;
+      if (italic) html = `<em>${html}</em>`;
+      if (underline) html = `<u>${html}</u>`;
+      if (strike) html = `<s>${html}</s>`;
+      return html;
+    }).join('');
+    const paragraphHtml = (pNode) => {
+      const pPr = pNode.getElementsByTagNameNS(ns, 'pPr')[0];
+      const styleNode = pPr?.getElementsByTagNameNS(ns, 'pStyle')[0];
+      const style = String(styleNode?.getAttributeNS(ns, 'val') || '').toLowerCase();
+      const headingMatch = style.match(/heading([1-6])/);
+      const alignNode = pPr?.getElementsByTagNameNS(ns, 'jc')[0];
+      const align = String(alignNode?.getAttributeNS(ns, 'val') || '').toLowerCase();
+      const alignStyle = ['center','right','left','both','justify'].includes(align) ? ` style="text-align:${align==='both'?'justify':align}"` : '';
+      const content = runsToHtml(pNode) || '<br>';
+      return headingMatch ? `<h${headingMatch[1]}${alignStyle}>${content}</h${headingMatch[1]}>` : `<p${alignStyle}>${content}</p>`;
+    };
+    const renderTable = (tbl) => {
+      const rows = [...tbl.children].filter(n => n.localName === 'tr').map(tr => `<tr>${[...tr.children].filter(n => n.localName === 'tc').map(tc => `<td>${[...tc.children].filter(n => n.localName === 'p').map(paragraphHtml).join('') || '<br>'}</td>`).join('')}</tr>`).join('');
+      return `<table><tbody>${rows}</tbody></table>`;
+    };
+    const body = doc.getElementsByTagNameNS(ns, 'body')[0];
+    const blocks = body ? [...body.children].filter(n => ['p','tbl'].includes(n.localName)).map(n => n.localName === 'tbl' ? renderTable(n) : paragraphHtml(n)).join('') : '';
+    return `<div class="viewer-doc"><div class="viewer-doc-paper">${blocks || '<p>Dokumen tidak memiliki teks yang dapat ditampilkan.</p>'}</div></div>`;
   }
 
   if (kind === 'pptx') {
@@ -985,8 +1040,168 @@ async function previewOfficeOpenXml(fullAtt, kind) {
     if (cells.some((value) => value !== undefined && value !== '')) rows.push(cells);
   }
   const colCount = Math.max(1, ...rows.map((r) => r.length));
-  const html = rows.slice(0, 300).map((row) => `<tr>${Array.from({length: colCount}, (_, i) => `<td>${SecurityService.escapeHtml(row[i] ?? '')}</td>`).join('')}</tr>`).join('');
+  const html = rows.slice(0, 300).map((row, r) => `<tr>${Array.from({length: colCount}, (_, i) => `<${r===0?'th':'td'}>${SecurityService.escapeHtml(row[i] ?? '')}</${r===0?'th':'td'}>`).join('')}</tr>`).join('');
   return `<div class="viewer-table"><h3>Pratinjau Excel</h3><div class="viewer-table-scroll"><table><tbody>${html || '<tr><td>Tidak ada data yang dapat ditampilkan.</td></tr>'}</tbody></table></div><p class="viewer-note">Pratinjau menampilkan maksimal 300 baris dari lembar pertama.</p></div>`;
+}
+
+function replaceAttachmentInCurrentNote(updatedAttachment, originalId) {
+  const idx = currentAttachments.findIndex(a => a.id === originalId);
+  if (idx < 0) return false;
+  currentAttachments[idx] = { ...currentAttachments[idx], ...updatedAttachment, id: originalId, updatedAt: Date.now() };
+  renderAttachmentsList();
+  return true;
+}
+
+async function persistAttachmentEditToCurrentNote() {
+  if (!currentNoteId) return false;
+  const existing = notes.find(n => n.id === currentNoteId);
+  if (!existing) return false;
+  const updated = {
+    ...existing,
+    title: el.noteTitle.value.trim() || existing.title || 'Tanpa Judul',
+    bodyHTML: SecurityService.sanitizeHTML(el.noteBody.innerHTML),
+    attachments: currentAttachments.map(a => ({ ...a })),
+    updatedAt: Date.now()
+  };
+  const idx = notes.findIndex(n => n.id === currentNoteId);
+  if (idx >= 0) notes[idx] = updated;
+  await StorageService.saveNote(updated);
+  currentAttachments = (updated.attachments || []).map(a => ({ ...a }));
+  renderAttachmentsList();
+  renderNotesList();
+  await UIService.updateStorageMeter();
+  document.dispatchEvent(new Event('cp104:refresh'));
+  return true;
+}
+
+function ensureEditModal() {
+  let modal = document.getElementById('cp104FileEditModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'cp104FileEditModal';
+  modal.className = 'cp104-modal';
+  modal.innerHTML = `<div class="cp104-dialog cp104-file-edit-dialog">
+    <div class="cp104-head"><div class="cp104-title" id="cp104EditTitle">Edit Berkas</div><button type="button" class="cp104-btn" id="cp104EditClose">Tutup</button></div>
+    <div id="cp104EditInfo" class="cp104-muted" style="margin-bottom:8px"></div>
+    <div id="cp104EditArea"></div>
+    <div class="cp104-actions" style="justify-content:flex-end;margin-top:10px"><button type="button" class="cp104-btn" id="cp104EditCancel">Batal</button><button type="button" class="cp104-btn primary" id="cp104EditSave">💾 Simpan Perubahan</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#cp104EditClose').onclick = modal.querySelector('#cp104EditCancel').onclick = () => modal.classList.remove('open');
+  return modal;
+}
+
+function xmlEscapeText(value) {
+  return SecurityService.escapeHtml(String(value ?? '')).replace(/&#39;/g, '&apos;');
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const b of bytes) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function makeStoredZip(entries) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = enc.encode(entry.name);
+    const data = entry.data instanceof Uint8Array ? entry.data : enc.encode(String(entry.data));
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + name.length);
+    const v = new DataView(local.buffer);
+    v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint16(6, 0x0800, true);
+    v.setUint16(8, 0, true); v.setUint16(10, 0, true); v.setUint16(12, 0, true); v.setUint32(14, crc, true);
+    v.setUint32(18, data.length, true); v.setUint32(22, data.length, true); v.setUint16(26, name.length, true); v.setUint16(28, 0, true);
+    local.set(name, 30); chunks.push(local, data); offset += local.length + data.length;
+    const c = new Uint8Array(46 + name.length); const cv = new DataView(c.buffer);
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true); cv.setUint16(8,0x0800,true);
+    cv.setUint16(10,0,true); cv.setUint16(12,0,true); cv.setUint16(14,0,true); cv.setUint32(16,crc,true);
+    cv.setUint32(20,data.length,true); cv.setUint32(24,data.length,true); cv.setUint16(28,name.length,true); cv.setUint16(30,0,true); cv.setUint16(32,0,true); cv.setUint16(34,0,true); cv.setUint16(36,0,true); cv.setUint32(38,0,true); cv.setUint32(42,offset-(local.length+data.length),true);
+    c.set(name,46); central.push(c);
+  }
+  const centralSize = central.reduce((n,x)=>n+x.length,0); const eocd = new Uint8Array(22); const ev=new DataView(eocd.buffer);
+  ev.setUint32(0,0x06054b50,true); ev.setUint16(8,entries.length,true); ev.setUint16(10,entries.length,true); ev.setUint32(12,centralSize,true); ev.setUint32(16,offset,true);
+  chunks.push(...central,eocd); return new Blob(chunks,{type:'application/zip'});
+}
+
+function htmlToDocxXml(html) {
+  const doc = new DOMParser().parseFromString(SecurityService.sanitizeHTML(html), 'text/html');
+  const run = (node, props = {}) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? `<w:r>${Object.keys(props).length ? `<w:rPr>${props.bold?'<w:b/>':''}${props.italic?'<w:i/>':''}${props.underline?'<w:u w:val="single"/>':''}</w:rPr>`:''}<w:t xml:space="preserve">${xmlEscapeText(node.nodeValue)}</w:t></w:r>` : '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const p = {...props}; const tag=node.tagName.toLowerCase();
+    if(tag==='strong'||tag==='b')p.bold=true; if(tag==='em'||tag==='i')p.italic=true; if(tag==='u')p.underline=true;
+    if(tag==='br') return '<w:r><w:br/></w:r>';
+    return [...node.childNodes].map(ch=>run(ch,p)).join('');
+  };
+  const blocks=[];
+  const walk = (node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag=node.tagName.toLowerCase();
+    if(tag==='table'){
+      const rows=[...node.querySelectorAll(':scope > tbody > tr, :scope > tr')];
+      blocks.push(`<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr>${rows.map(tr=>`<w:tr>${[...tr.children].map(td=>`<w:tc><w:p>${run(td)}</w:p></w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`);
+      return;
+    }
+    if(['p','div','li','blockquote','pre','h1','h2','h3','h4','h5','h6'].includes(tag)){
+      const style = /^h([1-6])$/.test(tag) ? `<w:pPr><w:pStyle w:val="Heading${tag.slice(1)}"/></w:pPr>` : '';
+      const content=run(node); if(content || tag!=='div') blocks.push(`<w:p>${style}${content||'<w:r><w:t></w:t></w:r>'}</w:p>`); return;
+    }
+    if(tag==='ul'||tag==='ol'){ [...node.children].forEach(li=>blocks.push(`<w:p><w:r><w:t>${tag==='ul'?'•':'1.'} </w:t></w:r>${run(li)}</w:p>`)); return; }
+    [...node.children].forEach(walk);
+  };
+  [...doc.body.childNodes].forEach(n=>{ if(n.nodeType===Node.ELEMENT_NODE) walk(n); else if(n.textContent?.trim()) blocks.push(`<w:p>${run(n)}</w:p>`); });
+  return blocks.join('') || '<w:p><w:r><w:t></w:t></w:r></w:p>';
+}
+
+function buildDocxFromHtml(html) {
+  const documentXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${htmlToDocxXml(html)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>`;
+  const types=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const wrels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  return makeStoredZip([{name:'[Content_Types].xml',data:types},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml},{name:'word/styles.xml',data:styles},{name:'word/_rels/document.xml.rels',data:wrels}]);
+}
+
+function buildXlsxFromTable(table) {
+  const rows=[...table.querySelectorAll('tr')].map(tr=>[...tr.children].map(td=>String(td.textContent||'')));
+  const sheetRows=rows.map((row,r)=>`<row r="${r+1}">${row.map((value,c)=>{let n=c+1,s='';while(n){const rem=(n-1)%26;s=String.fromCharCode(65+rem)+s;n=Math.floor((n-1)/26);}return `<c r="${s}${r+1}" t="inlineStr"><is><t xml:space="preserve">${xmlEscapeText(value)}</t></is></c>`;}).join('')}</row>`).join('');
+  const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`;
+  const workbook=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  const types=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const wrels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
+  return makeStoredZip([{name:'[Content_Types].xml',data:types},{name:'_rels/.rels',data:rels},{name:'xl/workbook.xml',data:workbook},{name:'xl/_rels/workbook.xml.rels',data:wrels},{name:'xl/worksheets/sheet1.xml',data:sheet}]);
+}
+
+async function editAttachment(att) {
+  const kind=AttachmentService.classifyAttachment(att); if(!['image','text','doc'].includes(kind)) { UIService.showToast('Jenis berkas ini belum memiliki editor internal.', 'info'); return; }
+  let full={...att}; if(!full.dataURL) full.dataURL=await StorageService.readMediaAttachment(full); if(!full.dataURL) { UIService.showToast('Data berkas tidak ditemukan.', 'danger'); return; }
+  const modal=ensureEditModal(); const area=modal.querySelector('#cp104EditArea'); area.innerHTML=''; modal.querySelector('#cp104EditTitle').textContent=`Edit: ${att.name}`; modal.querySelector('#cp104EditInfo').textContent='Perubahan disimpan sebagai versi baru dari lampiran yang sama.';
+  let saveFn=null;
+  if(kind==='image'){
+    modal.classList.remove('open');
+    FeaturePackService.openImageEditor(full);
+    return;
+  } else if(kind==='text'){
+    const ta=document.createElement('textarea'); ta.className='cp104-file-editor'; ta.value=AttachmentService.decodeBase64Text(full.dataURL); area.appendChild(ta); saveFn=()=>new Blob([ta.value],{type:full.mime||'text/plain'});
+  } else if(['docx','doc'].includes((full.ext||'').toLowerCase())){
+    const buffer=await AttachmentService.dataURLToArrayBuffer(full.dataURL); let html='';
+    if(window.mammoth){ const result=await window.mammoth.convertToHtml({arrayBuffer:buffer}); html=SecurityService.sanitizeHTML(result.value); }
+    else { const preview=SecurityService.sanitizeHTML(await previewOfficeOpenXml(full,'docx')); const holder=document.createElement('div'); holder.innerHTML=preview; html=holder.querySelector('.viewer-doc-paper')?.innerHTML || preview; }
+    const div=document.createElement('div'); div.className='cp104-file-editor cp104-doc-editor'; div.contentEditable='true'; div.innerHTML=html; area.appendChild(div); saveFn=()=>buildDocxFromHtml(div.innerHTML);
+  } else if(['xlsx','xls'].includes((full.ext||'').toLowerCase())){
+    const html=await previewOfficeOpenXml(full,'xlsx'); const temp=document.createElement('div'); temp.innerHTML=SecurityService.sanitizeHTML(html); const table=temp.querySelector('table');
+    if(!table) throw new Error('Tabel Excel tidak ditemukan.'); table.contentEditable='true'; table.classList.add('cp104-edit-table'); area.appendChild(table); saveFn=()=>buildXlsxFromTable(table);
+  }
+  modal.querySelector('#cp104EditSave').onclick=async()=>{ try{ const blob=saveFn?.(); if(!blob){modal.classList.remove('open'); return;} const dataURL=await AttachmentService.blobToDataURL(blob); const isSheet=['xlsx','xls'].includes((att.ext||'').toLowerCase()); const updated={...full,id:att.id,dataURL,mime:isSheet?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':full.mime,ext:isSheet?'xlsx':full.ext,name:isSheet&&att.ext==='xls'?String(att.name||'lembar').replace(/\.xls$/i,'.xlsx'):att.name,size:blob.size,filePath:null,fileUri:null,webviewSrc:null,createdAt:att.createdAt||Date.now()}; if(!replaceAttachmentInCurrentNote(updated,att.id)) throw new Error('Lampiran tidak lagi berada di catatan yang sedang diedit.'); if(currentNoteId){ await persistAttachmentEditToCurrentNote(); } modal.classList.remove('open'); UIService.showToast(currentNoteId ? 'Berkas berhasil diperbarui dan disimpan.' : 'Berkas diperbarui di editor. Simpan catatan untuk menyimpannya.', 'info'); }catch(e){UIService.showToast('Gagal menyimpan perubahan: '+e.message,'danger');} };
+  modal.classList.add('open');
 }
 
 async function previewAttachment(att) {
@@ -1017,6 +1232,11 @@ async function previewAttachment(att) {
   el.viewerBody.innerHTML = '';
 
   const kind = AttachmentService.classifyAttachment(fullAtt);
+  if (el.editViewerBtn) {
+    const editable = ['image','text','doc'].includes(kind);
+    el.editViewerBtn.style.display = editable ? 'inline-block' : 'none';
+    el.editViewerBtn.onclick = () => editAttachment(fullAtt);
+  }
 
   // Setup download button
   el.downloadViewerBtn.onclick = async () => {
@@ -1613,11 +1833,14 @@ function bindEventListeners() {
 
   if (el.insertFileBtn && el.inlineFileInput) {
     el.insertFileBtn.onclick = () => {
-      EditorService.captureSelection(el.noteBody);
+      const markerId = EditorService.createInsertionMarker(el.noteBody);
+      el.inlineFileInput.dataset.cp104Marker = markerId || '';
       el.inlineFileInput.click();
     };
     el.inlineFileInput.onchange = async (e) => {
-      await handleInlineFilesUpload(e.target.files);
+      const markerId = el.inlineFileInput.dataset.cp104Marker || null;
+      await handleInlineFilesUpload(e.target.files, markerId);
+      el.inlineFileInput.dataset.cp104Marker = '';
       el.inlineFileInput.value = '';
     };
   }
@@ -2309,19 +2532,32 @@ async function init() {
         UIService.showToast('Lampiran gambar sudah ditambahkan. Isi judul lalu simpan catatan.', 'info');
       },
       captureEditorSelection: () => EditorService.captureSelection(el.noteBody),
-      addAttachmentToCurrentNote: (attachment) => {
-        if (currentNoteId && el.overlay.classList.contains('open')) {
-          currentAttachments.push(attachment);
-          EditorService.restoreSelection(el.noteBody);
-          insertInlineAttachment(attachment);
-          renderAttachmentsList();
-          UIService.showToast('Gambar beranotasi ditambahkan tanpa menghapus lampiran sebelumnya.', 'info');
-          return;
-        }
-        openNoteEditor(null);
-        currentAttachments = [attachment];
+      createEditorInsertionMarker: () => {
+        if (!el.overlay.classList.contains('open')) return null;
+        return EditorService.createInsertionMarker(el.noteBody);
+      },
+      removeEditorInsertionMarker: (markerId) => EditorService.removeInsertionMarker(el.noteBody, markerId),
+      getAttachmentData: async (attachment) => StorageService.readMediaAttachment(attachment),
+      getCurrentAttachment: (attachmentId) => currentAttachments.find(a => a.id === attachmentId) || null,
+      replaceAttachmentInCurrentNote: (attachment, attachmentId) => {
+        if (!currentNoteId || !el.overlay.classList.contains('open')) return false;
+        const idx = currentAttachments.findIndex(a => a.id === attachmentId);
+        if (idx < 0) return false;
+        currentAttachments[idx] = { ...currentAttachments[idx], ...attachment, id: attachmentId };
         renderAttachmentsList();
-        UIService.showToast('Lampiran gambar sudah ditambahkan. Isi judul lalu simpan catatan.', 'info');
+        return true;
+      },
+      addAttachmentToCurrentNote: (attachment, options = {}) => {
+        if (!el.overlay.classList.contains('open')) {
+          if (options.markerId) EditorService.removeInsertionMarker(el.noteBody, options.markerId);
+          UIService.showToast('Buka editor catatan terlebih dahulu sebelum menambahkan anotasi.', 'danger');
+          return false;
+        }
+        currentAttachments.push({ ...attachment });
+        const inserted = insertInlineAttachment(attachment, options.markerId || null);
+        if (!inserted && options.markerId) EditorService.removeInsertionMarker(el.noteBody, options.markerId);
+        renderAttachmentsList();
+        return inserted;
       },
       addCategory: async (cat) => {
         categories.push(cat);
