@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.10 untuk membuat release APK kompatibel dengan versi lama.'
+        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.11 untuk membuat release APK kompatibel dengan versi lama.'
         required: false
         type: string
 
@@ -72,6 +72,7 @@ jobs:
             fi
           done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
+          test -f android/app/src/main/java/com/catatanpintar/app/FileExportPlugin.java
 
       - name: Restore required Android project files
         run: |
@@ -160,6 +161,7 @@ jobs:
             fi
           done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
+          test -f android/app/src/main/java/com/catatanpintar/app/FileExportPlugin.java
 
       - name: Verify release tag matches app version
         run: |
