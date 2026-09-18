@@ -2026,6 +2026,7 @@ function bindEventListeners() {
     el.importProgressText.textContent = '0%';
     el.doImportBtn.disabled = true;
     el.importOverlay.classList.add('open');
+    requestAnimationFrame(() => el.importOverlay.querySelector('.import-modal')?.scrollTo({top:0, behavior:'auto'}));
   };
 
   el.closeImportModalBtn.onclick = () => el.importOverlay.classList.remove('open');
@@ -2084,7 +2085,7 @@ function bindEventListeners() {
         const oldIds = notes.map(n => n.id);
         for (let i = 0; i < oldIds.length; i++) {
           await StorageService.deleteNote(oldIds[i]);
-          if (i % 3 === 0) await new Promise(r => setTimeout(r, 0));
+          if (i % 2 === 0) await new Promise(r => setTimeout(r, 0));
         }
         notes = [...incoming];
         categories = [...CORE_CATEGORIES];
@@ -2094,10 +2095,29 @@ function bindEventListeners() {
         notes = newNotes.concat(notes);
       }
 
+      el.importProgressBar.style.width = '60%';
+      el.importProgressText.textContent = '60% — Menyimpan catatan';
+      await new Promise(r => setTimeout(r, 0));
       // Persist in one canonical transaction path; saveNotes also offloads attachment bytes.
       await StorageService.saveNotes(notes, categories);
-      el.importProgressBar.style.width = '82%';
-      el.importProgressText.textContent = '82% — Menyimpan lampiran dan data';
+      el.importProgressBar.style.width = '85%';
+      el.importProgressText.textContent = '85% — Menyimpan lampiran, kategori & data keuangan';
+
+      if (pendingImportData.financeState && typeof pendingImportData.financeState === 'object') {
+        const fs = pendingImportData.financeState;
+        const mergeArray = (current, incomingItems) => {
+          if (!Array.isArray(incomingItems)) return current;
+          if (mode === 'replace') return incomingItems;
+          const ids = new Set(current.map(x => x && x.id).filter(Boolean));
+          return current.concat(incomingItems.filter(x => !x?.id || !ids.has(x.id)));
+        };
+        const oldOb = JSON.parse(localStorage.getItem('cp_obligations_v2') || '[]');
+        const oldSav = JSON.parse(localStorage.getItem('cp_savings_v2') || '[]');
+        const oldHist = JSON.parse(localStorage.getItem('cp_finance_history_v1') || '[]');
+        localStorage.setItem('cp_obligations_v2', JSON.stringify(mergeArray(Array.isArray(oldOb)?oldOb:[], fs.obligations)));
+        localStorage.setItem('cp_savings_v2', JSON.stringify(mergeArray(Array.isArray(oldSav)?oldSav:[], fs.savings)));
+        localStorage.setItem('cp_finance_history_v1', JSON.stringify(mergeArray(Array.isArray(oldHist)?oldHist:[], fs.history)));
+      }
 
       if (pendingImportData.categories && pendingImportData.categories.length > 0) {
         const mergedCats = [...categories];
@@ -2115,7 +2135,8 @@ function bindEventListeners() {
       populateCategorySelect();
       renderNotesList();
       await UIService.updateStorageMeter();
-      UIService.showToast(`Berhasil mengimpor ${incoming.length} catatan.`, 'info');
+      try { FeaturePackService.renderFinance?.(); } catch (_) {}
+      UIService.showToast(`Berhasil mengimpor ${incoming.length} catatan dan data pendukung.`, 'info');
       pendingImportData = null;
       setTimeout(() => el.importOverlay.classList.remove('open'), 900);
     } catch (err) {
