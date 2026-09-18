@@ -48,24 +48,41 @@ function releaseNotes(release, current, remote) {
   return `${raw ? `${raw}\n\n` : ''}Full Changelog: ${changelogUrl(current, remote)}`;
 }
 
-async function fetchJson(url) {
+async function fetchText(url) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 9000);
   try {
-    const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`, {
+    // Hindari custom header non-safelisted. Pada sebagian Android WebView,
+    // header tersebut memicu CORS preflight yang gagal meskipun GitHub dapat
+    // diakses normal melalui browser.
+    const response = await fetch(url, {
       cache: 'no-store',
+      mode: 'cors',
       signal: controller.signal,
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'Cache-Control': 'no-cache',
-        'X-GitHub-Api-Version': '2026-03-10'
-      }
+      headers: { Accept: 'application/json, application/xml, text/xml, */*' }
     });
     if (!response.ok) throw new Error(`GitHub HTTP ${response.status}`);
-    return await response.json();
+    return await response.text();
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJson(url) {
+  const text = await fetchText(`${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`);
+  return JSON.parse(text);
+}
+
+async function fetchLatestReleaseFromAtom() {
+  const xml = await fetchText(`https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases.atom?_=${Date.now()}`);
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const entry = doc.querySelector('entry');
+  if (!entry) return null;
+  const title = entry.querySelector('title')?.textContent?.trim() || '';
+  const link = entry.querySelector('link')?.getAttribute('href') || RELEASE_PAGE_URL;
+  const version = title.replace(/^v/i, '').trim();
+  if (!/^\d+(?:\.\d+){1,3}$/.test(version)) return null;
+  return { release: { tag_name: version, name: title, body: '', html_url: link, assets: [] }, version, asset: null };
 }
 
 async function fetchLatestRelease() {
@@ -73,14 +90,23 @@ async function fetchLatestRelease() {
     const latest = normalizeRelease(await fetchJson(LATEST_RELEASE_API_URL));
     if (latest) return latest;
   } catch (error) {
-    console.warn('Latest release check notice:', error);
+    console.warn('GitHub latest-release API notice:', error);
   }
 
-  const releases = await fetchJson(RELEASES_API_URL);
-  return (Array.isArray(releases) ? releases : [])
-    .map(normalizeRelease)
-    .filter(Boolean)
-    .sort((a, b) => compareVersions(b.version, a.version))[0] || null;
+  try {
+    const releases = await fetchJson(RELEASES_API_URL);
+    const candidate = (Array.isArray(releases) ? releases : [])
+      .map(normalizeRelease)
+      .filter(Boolean)
+      .sort((a, b) => compareVersions(b.version, a.version))[0];
+    if (candidate) return candidate;
+  } catch (error) {
+    console.warn('GitHub releases API notice:', error);
+  }
+
+  // Fallback khusus WebView: GitHub Releases Atom biasanya tidak membutuhkan
+  // API key dan tidak memakai header preflight. Tombol unduh akan membuka halaman release.
+  return fetchLatestReleaseFromAtom();
 }
 
 function getDismissedVersion() {

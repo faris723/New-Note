@@ -96,38 +96,118 @@ function buildSimpleDocx(html) {
   return makeStoredZip([{name:'[Content_Types].xml',data:types},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml},{name:'word/styles.xml',data:styles},{name:'word/_rels/document.xml.rels',data:wrels}]);
 }
 
-function buildSimplePdf(notes) {
-  const lines = [];
-  for (const note of notes) {
-    lines.push(String(note.title || 'Tanpa Judul').toUpperCase());
-    lines.push(`Kategori: ${note.category || 'Umum'}`);
-    lines.push(...SecurityService.stripHtml(note.bodyHTML || '').split(/\r?\n/));
-    lines.push('');
-    lines.push('------------------------------------------------------------');
-    lines.push('');
+function buildSimplePdf(notes = []) {
+  // PDF mandiri tanpa dependensi CDN. Setiap catatan dimulai pada halaman baru.
+  // Jika satu catatan panjang, catatan tersebut boleh berlanjut ke halaman berikutnya,
+  // tetapi catatan berikutnya selalu dimulai di halaman baru.
+  const encoder = new TextEncoder();
+  const clean = (value) => String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E\n\r\t]/g, '?')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+
+  const wrap = (value, max = 88) => {
+    const text = String(value ?? '').replace(/\r/g, '');
+    if (!text) return [''];
+    const result = [];
+    for (const raw of text.split('\n')) {
+      if (!raw) { result.push(''); continue; }
+      let line = '';
+      for (const word of raw.split(/\s+/)) {
+        if (!word) continue;
+        if (word.length > max) {
+          if (line) { result.push(line); line = ''; }
+          for (let i = 0; i < word.length; i += max) result.push(word.slice(i, i + max));
+        } else if (!line) line = word;
+        else if ((line + ' ' + word).length <= max) line += ' ' + word;
+        else { result.push(line); line = word; }
+      }
+      if (line) result.push(line);
+    }
+    return result.length ? result : [''];
+  };
+
+  const maxLines = 45;
+  const notePages = [];
+  const sourceNotes = Array.isArray(notes) ? notes : [];
+
+  for (let idx = 0; idx < sourceNotes.length; idx++) {
+    const note = sourceNotes[idx] || {};
+    const title = String(note.title || 'Tanpa Judul');
+    const category = String(note.category || 'Umum');
+    const date = note.updatedAt || note.createdAt ? new Date(note.updatedAt || note.createdAt).toLocaleString('id-ID') : '';
+    const body = SecurityService.stripHtml(note.bodyHTML || '').replace(/\u00a0/g, ' ');
+    const lines = [
+      `${idx + 1}. ${title}`,
+      `Kategori: ${category}${date ? ` | Tanggal: ${date}` : ''}`,
+      ...(note.finance ? [`Keuangan: ${note.finance.type || ''} Rp ${Number(note.finance.amount || 0).toLocaleString('id-ID')}`] : []),
+      '',
+      ...wrap(body, 88)
+    ];
+    const attachments = Array.isArray(note.attachments) ? note.attachments : [];
+    if (attachments.length) {
+      lines.push('', 'Lampiran:');
+      attachments.forEach((att, i) => lines.push(`${i + 1}. ${att.name || 'lampiran'}`));
+    }
+
+    const pagesForNote = [];
+    for (let pos = 0; pos < lines.length || pos === 0; pos += maxLines) {
+      const chunk = lines.slice(pos, pos + maxLines);
+      if (!chunk.length) break;
+      pagesForNote.push(chunk);
+    }
+    notePages.push(pagesForNote.length ? pagesForNote : [['']]);
   }
-  const clean = (s) => String(s).replace(/[^\x20-\x7E]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-  const wrapped = [];
-  for (const line of lines) {
-    const text = line || ' ';
-    for (let i = 0; i < text.length; i += 92) wrapped.push(text.slice(i, i + 92));
+
+  if (!notePages.length) notePages.push([['Tidak ada catatan untuk diekspor.']]);
+  const totalPages = notePages.reduce((sum, pages) => sum + pages.length, 0);
+  const objs = [];
+  const add = (value) => { objs.push(value); return objs.length; };
+  const catalogId = add(null);
+  const pagesId = add(null);
+  const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pageIds = [];
+  const contentIds = [];
+  let pageNo = 0;
+
+  for (let noteIdx = 0; noteIdx < notePages.length; noteIdx++) {
+    const pages = notePages[noteIdx];
+    for (let part = 0; part < pages.length; part++) {
+      const chunk = pages[part];
+      pageNo += 1;
+      const body = [];
+      body.push(`BT /F1 12 Tf 50 800 Td (${clean(chunk[0] || 'Catatan')}) Tj ET`);
+      for (let i = 1; i < chunk.length; i++) {
+        body.push(`BT /F1 10 Tf 50 ${780 - (i - 1) * 16} Td (${clean(chunk[i])}) Tj ET`);
+      }
+      body.push(`BT /F1 8 Tf 50 28 Td (Halaman ${pageNo} dari ${totalPages}) Tj ET`);
+      const stream = body.join('\n');
+      const contentId = add(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream`);
+      const pageId = add(null);
+      contentIds.push(contentId);
+      pageIds.push(pageId);
+    }
   }
-  const perPage = 46; const pages = Math.max(1, Math.ceil(wrapped.length / perPage));
-  const objs = []; const pageIds = []; const contentIds = [];
-  const add = x => { objs.push(x); return objs.length; };
-  const catalog = add(null); const pagesObj = add(null); const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-  for (let p = 0; p < pages; p++) {
-    const body = wrapped.slice(p * perPage, (p + 1) * perPage).map((line, i) => `BT /F1 10 Tf 50 ${790 - i * 16} Td (${clean(line)}) Tj ET`).join('\n');
-    contentIds.push(add(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`));
-    pageIds.push(add(null));
+
+  for (let i = 0; i < pageIds.length; i++) {
+    objs[pageIds[i] - 1] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
   }
-  for (let i = 0; i < pages; i++) objs[pageIds[i] - 1] = `<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
-  objs[pagesObj - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pages} >>`;
-  objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
-  let out = '%PDF-1.4\n%CatatanPintar\n'; const offsets = [0];
-  for (let i = 0; i < objs.length; i++) { offsets.push(out.length); out += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`; }
-  const xref = out.length; out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`; for (let i = 1; i <= objs.length; i++) out += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`; out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return new Blob([new TextEncoder().encode(out)], {type:'application/pdf'});
+  objs[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+  objs[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+
+  let output = '%PDF-1.4\n%CatatanPintar\n';
+  const offsets = [0];
+  for (let i = 0; i < objs.length; i++) {
+    offsets.push(encoder.encode(output).length);
+    output += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xref = encoder.encode(output).length;
+  output += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objs.length; i++) output += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  output += `trailer\n<< /Size ${objs.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([encoder.encode(output)], { type: 'application/pdf' });
 }
 
 async function buildPortableNotes(notes = []) {
@@ -170,7 +250,7 @@ export const ExportImportService = {
     };
     const backupData = {
       app: 'Catatan Pintar — Offline',
-      version: '1.0.12',
+      version: '1.0.13',
       exportedAt: now.toISOString(),
       notesCount: portableNotes.length,
       categories: categories.filter(c => !c.core),
@@ -182,8 +262,8 @@ export const ExportImportService = {
     if (format === 'json') {
       const jsonStr = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
-      await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Backup_${dateStr}.json`, 'application/json');
-      return { success: true, count: notes.length };
+      const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Backup_${dateStr}.json`, 'application/json');
+      return { success: true, count: notes.length, result };
     }
 
     if (format === 'zip') {
@@ -211,8 +291,8 @@ export const ExportImportService = {
       const resolvedEntries = [];
       for (const entry of zipEntries) resolvedEntries.push({ name: entry.name, data: entry.data instanceof Promise ? await entry.data : entry.data });
       const zipBlob = makeStoredZip(resolvedEntries);
-      await AttachmentService.saveOrDownloadBlob(zipBlob, `CatatanPintar_Arsip_${dateStr}.zip`, 'application/zip');
-      return { success: true, count: notes.length };
+      const result = await AttachmentService.saveOrDownloadBlob(zipBlob, `CatatanPintar_Arsip_${dateStr}.zip`, 'application/zip');
+      return { success: true, count: notes.length, result };
     }
 
     if (format === 'word') {
@@ -264,8 +344,8 @@ export const ExportImportService = {
       });
 
       const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
-      await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Teks_${dateStr}.txt`, 'text/plain');
-      return { success: true, count: notes.length };
+      const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Teks_${dateStr}.txt`, 'text/plain');
+      return { success: true, count: notes.length, result };
     }
 
     if (format === 'pdf') {
