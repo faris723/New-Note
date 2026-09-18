@@ -5,6 +5,32 @@
  */
 
 export const EditorService = {
+
+  /** Save the current contenteditable selection so a file picker or modal can open without losing the caret. */
+  captureSelection(targetElement) {
+    if (!targetElement) return null;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!targetElement.contains(range.commonAncestorContainer)) return null;
+    const saved = range.cloneRange();
+    this._savedSelection = { target: targetElement, range: saved };
+    return saved;
+  },
+
+  restoreSelection(targetElement) {
+    const saved = this._savedSelection;
+    if (!saved || saved.target !== targetElement) return false;
+    try {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(saved.range);
+      targetElement.focus();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
   /**
    * Insert text at current cursor/selection position.
    * Uses modern Selection/Range API for contenteditable elements and
@@ -35,6 +61,7 @@ export const EditorService = {
 
     // 2. Regular or contenteditable text elements
     targetElement.focus();
+    this.restoreSelection(targetElement);
     const sel = window.getSelection();
     if (!sel) return;
 
@@ -76,6 +103,7 @@ export const EditorService = {
   insertHtmlAtCursor(targetElement, htmlString) {
     if (!targetElement) return;
     targetElement.focus();
+    this.restoreSelection(targetElement);
 
     const sel = window.getSelection();
     if (!sel) return;

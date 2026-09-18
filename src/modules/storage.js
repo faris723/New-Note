@@ -144,6 +144,14 @@ export async function syncIndividualNoteFiles(notes = [], customCategories = [])
         isPinned: Boolean(note.isPinned),
         finance: note.finance || null,
         reminder: note.reminder || null,
+        eventDate: note.eventDate || '',
+        eventTime: note.eventTime || '',
+        eventLocation: note.eventLocation || '',
+        attachments: Array.isArray(note.attachments) ? note.attachments.map(a => ({
+          id: a.id, name: a.name, mime: a.mime, ext: a.ext, size: a.size, kind: a.kind,
+          filePath: a.filePath || null, fileUri: a.fileUri || null, webviewSrc: a.webviewSrc || null,
+          createdAt: a.createdAt || Date.now()
+        })) : [],
         createdAt: note.createdAt || Date.now(),
         updatedAt: note.updatedAt || Date.now()
       };
@@ -988,6 +996,17 @@ export const StorageService = {
     // Update in-memory cache
     if (!inMemoryCache.notes) {
       inMemoryCache.notes = await this.loadNotes();
+    }
+
+    // Clean up physical files that were intentionally removed from this note.
+    // Do this only after the new attachment list is known, so adding an image
+    // never removes unrelated attachments from the same note.
+    const previous = inMemoryCache.notes.find(n => n.id === noteToSave.id);
+    const keepIds = new Set(processedAttachments.map(a => a.id));
+    for (const oldAtt of (previous?.attachments || [])) {
+      if (oldAtt?.id && !keepIds.has(oldAtt.id) && oldAtt.filePath) {
+        try { await Filesystem.deleteFile({ path: oldAtt.filePath, directory: Directory.External }); } catch (_) {}
+      }
     }
 
     const idx = inMemoryCache.notes.findIndex(n => n.id === noteToSave.id);

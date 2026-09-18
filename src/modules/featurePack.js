@@ -33,10 +33,10 @@ const saveHistory = (items) => saveJSON(HIST_KEY, items.slice(-1000));
 const addHistory = (entry) => { const items = loadHistory(); items.push({ id: uid('hist'), at: Date.now(), ...entry }); saveHistory(items); };
 const fundingLabel = (id, savings = []) => id === 'net' ? 'Dana Bersih' : id === 'other' ? 'Lainnya / sumber manual' : (savings.find(s => s.id === id)?.name || id);
 const sumFunding = (funding = []) => funding.reduce((n, x) => n + Number(x.amount || 0), 0);
-const debtPaidAmount = (note) => { const f = note?.finance || {}; if (Array.isArray(f.payments)) return Math.min(Number(f.amount || 0), f.payments.reduce((n,p)=>n+Number(p.amount||0),0)); return f.debtPaid ? Number(f.amount || 0) : Number(f.paidAmount || 0); };
+const debtPaidAmount = (note) => { const f = note?.finance || {}; if (Array.isArray(f.payments) && f.payments.length) return Math.min(Number(f.amount || 0), f.payments.reduce((n,p)=>n+Number(p.amount||0),0)); return Math.min(Number(f.amount || 0), f.debtPaid ? Number(f.amount || 0) : Number(f.paidAmount || 0)); };
 const obligationPaidAmount = (item) => Math.min(Number(item?.amount||0), Array.isArray(item?.payments) ? item.payments.reduce((n,p)=>n+Number(p.amount||0),0) : (item?.isPaid ? Number(item?.amount||0) : Number(item?.paidAmount||0)));
 const remainingAmount = (total, paid) => Math.max(0, Number(total||0)-Number(paid||0));
-const debtPayments = (note) => Array.isArray(note?.finance?.payments) ? note.finance.payments : [];
+const debtPayments = (note) => { const f = note?.finance || {}; if (Array.isArray(f.payments) && f.payments.length) return f.payments; const paid = debtPaidAmount(note); return paid > 0 ? [{ amount: paid, funding: f.funding || (f.debtPaid ? [{ id: 'net', amount: paid }] : []) }] : []; };
 const obligationPayments = (item) => Array.isArray(item?.payments) && item.payments.length ? item.payments : (item?.isPaid ? [{ amount: item.amount, funding: item.funding || (item.deductFromNet ? [{ id: 'net', amount: item.amount }] : []) }] : (Number(item?.paidAmount || 0) > 0 ? [{ amount: item.paidAmount, funding: item.funding || [] }] : []));
 const netFromPayments = (payments = []) => payments.reduce((n, p) => n + sumFunding((p.funding || []).filter(f => f.id === 'net')), 0);
 
@@ -45,17 +45,17 @@ function addStyle() {
   const style = document.createElement('style');
   style.id = 'cp104-style';
   style.textContent = `
-    .cp104-nav{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:90;display:flex;gap:5px;padding:6px;background:rgba(255,252,244,.97);border:1px solid var(--card-edge,#ddd);border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.16);backdrop-filter:blur(8px)}
-    .cp104-nav button{border:0;background:transparent;padding:9px 13px;border-radius:10px;flex:1;font:600 12px inherit;color:var(--ink-soft,#667);cursor:pointer}.cp104-nav button.active{background:var(--ink,#27352b);color:#fff}
-    .cp104-panel{position:fixed;inset:0;z-index:80;background:var(--paper,#f8f4e9);overflow:auto;padding:18px 14px 120px;display:none}.cp104-panel.open{display:block}
+    .cp104-nav{position:fixed;left:0;right:0;bottom:0;width:100%;transform:none;z-index:90;display:flex;gap:0;padding:5px 8px calc(5px + env(safe-area-inset-bottom));background:rgba(255,252,244,.98);border-top:1px solid var(--card-edge,#ddd);box-shadow:0 -6px 22px rgba(0,0,0,.12);backdrop-filter:blur(10px);border-radius:0}
+    .cp104-nav button{border:0;background:transparent;padding:10px 8px;border-radius:9px;flex:1;min-width:0;font:600 12px inherit;color:var(--ink-soft,#667);cursor:pointer;text-align:center}.cp104-nav button.active{background:var(--ink,#27352b);color:#fff}
+    .cp104-panel{position:fixed;inset:0;z-index:80;background:var(--paper,#f8f4e9);overflow:auto;padding:18px 14px 140px;display:none}.cp104-panel.open{display:block}
     .cp104-head{max-width:960px;margin:0 auto 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.cp104-title{font:700 22px 'Source Serif 4',Georgia,serif}.cp104-actions{display:flex;gap:6px;flex-wrap:wrap}.cp104-btn{border:1px solid var(--card-edge,#ddd);background:#fff;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}.cp104-btn.primary{background:var(--ink,#27352b);color:#fff;border-color:var(--ink,#27352b)}
     .cp104-grid{max-width:960px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cp104-card{background:#fff;border:1px solid var(--card-edge,#ddd);border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.cp104-card h3{margin:0 0 6px;font:700 14px 'Source Serif 4',Georgia,serif}.cp104-val{font:700 18px 'IBM Plex Mono',monospace}.cp104-muted{font-size:11px;color:var(--ink-soft,#667)}
     .cp104-wide{grid-column:1/-1}.cp104-scroll{overflow:auto;max-height:320px}.cp104-input{width:100%;box-sizing:border-box;border:1px solid var(--card-edge,#ddd);border-radius:7px;padding:9px;background:#fff}.cp104-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.cp104-row>*{flex:1;min-width:0}.cp104-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;border:1px solid #ddd;font-size:11px;background:#fff}.cp104-bar{height:9px;border-radius:8px;background:#eee9dc;overflow:hidden}.cp104-bar>i{display:block;height:100%;background:var(--moss,#47593f)}
     .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}.cp104-day{min-height:62px;border:1px solid #e7e1d3;background:#fff;border-radius:6px;padding:5px;font-size:11px;cursor:pointer}.cp104-day.muted{opacity:.42}.cp104-day.sel{outline:2px solid var(--ink,#27352b)}.cp104-day b{display:block;margin-bottom:4px}.cp104-dot{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px;margin-top:2px;padding:1px 3px;border-radius:4px;background:#f3ead2}
     .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-funding{border:1px dashed #d8d0bf;border-radius:8px;padding:9px;background:#faf7ee}.cp104-funding-search{margin-bottom:7px}.cp104-fund-row{display:grid;grid-template-columns:auto 1fr 120px;gap:7px;align-items:center;padding:5px 0}.cp104-fund-row input[type=number]{width:100%;box-sizing:border-box}.cp104-history{margin-top:8px;border-top:1px solid #eee8dc;padding-top:7px}.cp104-history-item{padding:7px 0;border-bottom:1px solid #eee8dc;font-size:11px}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
     .cp104-batch{position:fixed;left:10px;right:10px;bottom:74px;z-index:89;display:none;background:#fffdf7;border:1px solid #d8d0bf;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.cp104-batch.open{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.cp104-batch button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:700}
-    .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none}
-    @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-wide{grid-column:auto}.cp104-nav button{padding:8px 10px}.cp104-title{font-size:19px}}
+    .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none;display:block;margin:0 auto}.cp104-canvas-wrap canvas+canvas{position:absolute;left:8px;top:8px;margin:0}.cp104-inline-note{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;margin:2px 3px;border:1px solid var(--card-edge,#d8d0bb);border-radius:7px;background:#faf7ef;cursor:pointer;user-select:none}.cp104-inline-note:hover{border-color:var(--moss,#47593f);background:#f4f0e5}.cp104-inline-note small{color:var(--ink-soft,#667);font-size:9px}
+    @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-wide{grid-column:auto}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:19px}}
   `;
   document.head.appendChild(style);
 }
@@ -227,6 +227,7 @@ export const FeaturePackService = {
       const icon = window.prompt('Ikon (opsional):', '📁') || '📁';
       await this.ctx.addCategory({ id: uid('cat'), name: name.trim(), icon, color: '#3d5a6b', core: false });
     });
+    document.getElementById('cp104ImageBtn')?.addEventListener('mousedown', () => { try { this.ctx.captureEditorSelection?.(); } catch (_) {} });
     document.getElementById('cp104ImageBtn')?.addEventListener('click', () => this.openImageEditor());
     document.getElementById('cp104BatchDelete').onclick = () => this.batchDelete();
     document.getElementById('cp104BatchMove').onclick = () => this.batchMove();
@@ -326,7 +327,24 @@ export const FeaturePackService = {
   },
 
   applySavingsDelta(funding, sign=1) {
-    for(const f of funding||[]){if(f.id==='other'||f.id==='net')continue;const s=this.savings.find(x=>x.id===f.id);if(!s)throw new Error('Pos tabungan sumber dana tidak ditemukan.');s.balance=Number(s.balance||0)+sign*Number(f.amount||0);if(s.balance<0)throw new Error(`Saldo tabungan ${s.name} tidak mencukupi.`);}
+    const items = (funding || []).filter((f) => f && f.id !== 'other' && f.id !== 'net' && Number(f.amount || 0) > 0);
+    // Validate the whole operation before mutating anything. This prevents a
+    // multi-source payment from partially changing balances when one source fails.
+    if (sign < 0) {
+      for (const f of items) {
+        const s = this.savings.find(x => x.id === f.id);
+        if (!s) throw new Error('Pos tabungan sumber dana tidak ditemukan.');
+        if (Number(f.amount || 0) > Number(s.balance || 0)) throw new Error(`Saldo tabungan ${s.name} tidak mencukupi.`);
+      }
+    } else {
+      for (const f of items) {
+        if (!this.savings.some(x => x.id === f.id)) throw new Error('Pos tabungan sumber dana tidak ditemukan.');
+      }
+    }
+    for (const f of items) {
+      const s = this.savings.find(x => x.id === f.id);
+      s.balance = Number(s.balance || 0) + sign * Number(f.amount || 0);
+    }
     saveJSON(SAV_KEY,this.savings);
   },
 
@@ -431,12 +449,20 @@ export const FeaturePackService = {
     const oldFunding = existing?.finance?.funding || (type==='expense' ? [{id:'net',amount:Number(existing?.finance?.amount)||0}] : []);
     let funding=[];
     try { if(type==='expense') funding=this.readFunding(form,amount,existingId,oldFunding); } catch(e) { this.ctx.toast(e.message,'danger'); return; }
-    if(type==='expense' && existing) this.applySavingsDelta(oldFunding,-1);
+    if(type==='expense' && existing) this.applySavingsDelta(oldFunding,1);
     if(type==='expense') { try { this.applySavingsDelta(funding,-1); } catch(e) { if(existing) this.applySavingsDelta(oldFunding,1); this.ctx.toast(e.message,'danger'); return; } }
     const legacyPaid = existing?.finance?.debtPaid ? Number(existing.finance.amount || 0) : Number(existing?.finance?.paidAmount || 0);
-    const finance = { type, amount, date: String(data.get('date') || today()), debtTo: String(data.get('debtTo') || '').trim(), debtPurpose: String(data.get('debtPurpose') || '').trim(), debtPaid: type==='debt' ? (Array.isArray(existing?.finance?.payments) ? debtPaidAmount(existing) >= amount : legacyPaid >= amount) : false, paidAmount: type==='debt' ? Math.min(amount, Array.isArray(existing?.finance?.payments) ? debtPaidAmount(existing) : legacyPaid) : 0, payments: type==='debt' ? (Array.isArray(existing?.finance?.payments) ? existing.finance.payments : []) : undefined, incomeFrom: String(data.get('source') || '').trim(), expenseFor: String(data.get('purpose') || '').trim(), funding };
-    const note = existing ? { ...existing, title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), finance, category: 'keuangan', updatedAt: Date.now() } : { id: uid('note'), title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), category: 'keuangan', finance, reminder: null, eventDate: '', eventLocation: '', attachments: [], createdAt: Date.now(), updatedAt: Date.now() };
-    await this.ctx.persistNote(note);
+    const finance = { type, amount, date: String(data.get('date') || today()), debtTo: String(data.get('debtTo') || '').trim(), debtPurpose: String(data.get('debtPurpose') || '').trim(), debtPaid: type==='debt' ? ((Array.isArray(existing?.finance?.payments) && existing.finance.payments.length) ? debtPaidAmount(existing) >= amount : legacyPaid >= amount) : false, paidAmount: type==='debt' ? Math.min(amount, (Array.isArray(existing?.finance?.payments) && existing.finance.payments.length) ? debtPaidAmount(existing) : legacyPaid) : 0, payments: type==='debt' ? (Array.isArray(existing?.finance?.payments) ? existing.finance.payments : []) : undefined, incomeFrom: String(data.get('source') || '').trim(), expenseFor: String(data.get('purpose') || '').trim(), funding };
+    const note = existing ? { ...existing, title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), finance, category: 'keuangan', attachments: Array.isArray(existing.attachments) ? existing.attachments : [], updatedAt: Date.now() } : { id: uid('note'), title: String(data.get('title') || 'Tanpa Judul').trim(), bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), category: 'keuangan', finance, reminder: null, eventDate: '', eventLocation: '', attachments: [], createdAt: Date.now(), updatedAt: Date.now() };
+    try {
+      await this.ctx.persistNote(note);
+    } catch (err) {
+      if (type === 'expense') {
+        try { this.applySavingsDelta(funding, 1); if (existing) this.applySavingsDelta(oldFunding, -1); } catch (rollbackErr) { console.warn('Rollback pengeluaran gagal:', rollbackErr); }
+      }
+      this.ctx.toast('Gagal menyimpan transaksi. Perubahan saldo sumber dana dibatalkan.', 'danger');
+      return;
+    }
     if(type==='expense') await this.recordFundingHistory('transaction',note.id,existing?'Ubah pengeluaran':'Pengeluaran',amount,funding,{note:String(data.get('purpose')||'').trim()});
     else await this.recordFundingHistory('transaction',note.id,type==='income'?'Pemasukan':'Hutang',amount,[],{note: type==='income'?String(data.get('source')||'').trim():String(data.get('debtTo')||'').trim()});
     document.getElementById('cp104FormModal').classList.remove('open'); this.renderFinance(); this.ctx.toast(`${type === 'income' ? 'Pemasukan' : type === 'expense' ? 'Pengeluaran' : 'Hutang'} berhasil disimpan.`, 'info');
@@ -626,16 +652,16 @@ export const FeaturePackService = {
   buildImageModal() {
     if (document.getElementById('cp104ImageModal')) return;
     const modal = document.createElement('div'); modal.id = 'cp104ImageModal'; modal.className = 'cp104-modal';
-    modal.innerHTML = '<div class="cp104-dialog"><div class="cp104-head"><div class="cp104-title">🖼️ Anotasi Gambar</div><button type="button" class="cp104-btn" id="cp104ImgClose">Tutup</button></div><div class="cp104-tools"><button type="button" data-tool="pen">✏️ Pena</button><button type="button" data-tool="line">╱ Garis</button><button type="button" data-tool="rect">□ Kotak</button><button type="button" data-tool="ellipse">○ Elips</button><button type="button" data-tool="arrow">➜ Panah</button><button type="button" data-tool="eraser">⌫ Penghapus</button><button type="button" id="cp104ImgText">Teks</button><input type="color" id="cp104ImgColor" value="#a3402f"><input type="range" id="cp104ImgSize" min="1" max="20" value="4"><button type="button" id="cp104ImgUndo">Undo</button><button type="button" id="cp104ImgRedo">Redo</button><button type="button" id="cp104ImgClear">Bersihkan</button></div><div class="cp104-canvas-wrap"><canvas id="cp104ImgBase"></canvas><canvas id="cp104ImgDraw" style="position:absolute;left:8px;top:8px"></canvas></div><div class="cp104-actions" style="justify-content:flex-end;margin-top:8px"><button type="button" class="cp104-btn" id="cp104ImgCancel">Batal</button><button type="button" class="cp104-btn primary" id="cp104ImgSave">Simpan sebagai lampiran</button></div></div>';
+    modal.innerHTML = '<div class="cp104-dialog"><div class="cp104-head"><div class="cp104-title">🖼️ Anotasi Gambar</div><button type="button" class="cp104-btn" id="cp104ImgClose">Tutup</button></div><div class="cp104-tools"><button type="button" data-tool="pen">✏️ Pena</button><button type="button" data-tool="line">╱ Garis</button><button type="button" data-tool="rect">□ Kotak</button><button type="button" data-tool="ellipse">○ Elips</button><button type="button" data-tool="arrow">➜ Panah</button><button type="button" data-tool="eraser">⌫ Penghapus</button><button type="button" id="cp104ImgText">Teks</button><input type="color" id="cp104ImgColor" value="#a3402f"><input type="range" id="cp104ImgSize" min="1" max="20" value="4"><button type="button" id="cp104ImgUndo">Undo</button><button type="button" id="cp104ImgRedo">Redo</button><button type="button" id="cp104ImgClear">Bersihkan</button></div><div class="cp104-canvas-wrap"><canvas id="cp104ImgBase"></canvas><canvas id="cp104ImgDraw"></canvas><canvas id="cp104ImgTextLayer"></canvas></div><div class="cp104-actions" style="justify-content:flex-end;margin-top:8px"><button type="button" class="cp104-btn" id="cp104ImgCancel">Batal</button><button type="button" class="cp104-btn primary" id="cp104ImgSave">Simpan sebagai lampiran</button></div></div>';
     document.body.appendChild(modal);
-    const base = modal.querySelector('#cp104ImgBase'); const draw = modal.querySelector('#cp104ImgDraw'); ImageEditorService.init(base, draw);
+    const base = modal.querySelector('#cp104ImgBase'); const draw = modal.querySelector('#cp104ImgDraw'); const textLayer = modal.querySelector('#cp104ImgTextLayer'); ImageEditorService.init(base, draw, textLayer);
     modal.querySelector('#cp104ImgClose').onclick = modal.querySelector('#cp104ImgCancel').onclick = () => modal.classList.remove('open');
     modal.querySelectorAll('[data-tool]').forEach((button) => button.onclick = () => ImageEditorService.setTool(button.dataset.tool));
     modal.querySelector('#cp104ImgColor').oninput = (e) => ImageEditorService.setColor(e.target.value);
     modal.querySelector('#cp104ImgSize').oninput = (e) => ImageEditorService.setSize(e.target.value);
     modal.querySelector('#cp104ImgUndo').onclick = () => ImageEditorService.undo(); modal.querySelector('#cp104ImgRedo').onclick = () => ImageEditorService.redo(); modal.querySelector('#cp104ImgClear').onclick = () => ImageEditorService.clear();
-    modal.querySelector('#cp104ImgText').onclick = () => { ImageEditorService.setTool('text'); const text = window.prompt('Teks anotasi:'); if (text) ImageEditorService.addText(20, 30, text); };
-    modal.querySelector('#cp104ImgSave').onclick = () => { const data = ImageEditorService.exportFlattened(); const att = { id: uid('img'), name: `anotasi_${today()}.png`, mime: 'image/png', ext: 'png', size: Math.round(data.length * .75), dataURL: data, kind: 'image', createdAt: Date.now() }; this.ctx.openNewNoteWithAttachment(att); modal.classList.remove('open'); this.ctx.toast('Gambar beranotasi siap dilampirkan ke catatan baru.', 'info'); };
+    modal.querySelector('#cp104ImgText').onclick = () => { ImageEditorService.setTool('text'); const text = window.prompt('Teks anotasi (setelah muncul, seret teks untuk memindahkannya):'); if (text) { const item = ImageEditorService.addText(Math.round(ImageEditorService.width * 0.12), Math.round(ImageEditorService.height * 0.18), text); if (item) this.ctx.toast('Teks ditambahkan. Pilih alat Teks lalu seret teks untuk memindahkannya.', 'info'); } };
+    modal.querySelector('#cp104ImgSave').onclick = () => { const data = ImageEditorService.exportFlattened(); const att = { id: uid('img'), name: `anotasi_${today()}.png`, mime: 'image/png', ext: 'png', size: Math.round(data.length * .75), dataURL: data, kind: 'image', createdAt: Date.now() }; this.ctx.addAttachmentToCurrentNote ? this.ctx.addAttachmentToCurrentNote(att) : this.ctx.openNewNoteWithAttachment(att); modal.classList.remove('open'); };
   },
 
   openImageEditor() {

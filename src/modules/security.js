@@ -28,7 +28,7 @@ export const SecurityService = {
         'UL','OL','LI','BLOCKQUOTE','PRE','CODE','TABLE','THEAD','TBODY',
         'TFOOT','TR','TH','TD','HR','H1','H2','H3','H4','H5','H6','IMG'
       ]);
-      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src']);
+      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src','data-att-id','contenteditable']);
       const nodes = Array.from(doc.body.querySelectorAll('*'));
 
       for (const node of nodes) {
