@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.5 untuk membuat release APK kompatibel dengan versi lama.'
+        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.7 untuk membuat release APK kompatibel dengan versi lama.'
         required: false
         type: string
 
@@ -70,7 +70,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: CatatanPintar-debug-v1.0.5
+          name: CatatanPintar-debug-v${{ github.sha }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -139,7 +139,7 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: CatatanPintar-release-v1.0.5
+          name: CatatanPintar-release-${{ inputs.release_tag }}
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
