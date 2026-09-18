@@ -9,4 +9,4 @@
  *   3. Tag Git yang di-push, HARUS diawali huruf v, misal: v1.0.1
  *      (tag inilah yang memicu GitHub Actions membuat Release baru)
  */
-export const APP_VERSION = '1.0.7';
+export const APP_VERSION = '1.0.8';

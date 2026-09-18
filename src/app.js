@@ -42,7 +42,7 @@ const el = {};
 function cacheElements() {
   const ids = [
     'financeBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
-    'installAppBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
+    'installAppBtn', 'updateBadgeBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
     'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
     'envBadgeBtn', 'envBadgeIcon', 'envBadgeText',
     'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
@@ -54,7 +54,7 @@ function cacheElements() {
     'filterPanel', 'filterCategory', 'filterAttachType', 'filterDateFrom', 'filterDateTo', 'filterResetBtn',
     'chipsRow', 'notesList', 'emptyState', 'fabChat', 'fabAdd',
     'overlay', 'editorModeLabel', 'pinEditorBtn', 'closeEditorBtn', 'noteTitle', 'toolbar', 'fontSizeSelect', 'fontFamilySelect',
-    'insertTableBtn', 'openSketchBtn', 'noteBody',
+    'insertTableBtn', 'openSketchBtn', 'insertFileBtn', 'inlineFileInput', 'noteBody',
     'categorySelect', 'categoryHint',
     'reminderRow', 'noteReminderInput', 'clearReminderBtn', 'notifyPermBtn',
     'financeRow', 'financeType', 'financeAmount',
@@ -688,8 +688,24 @@ async function saveCurrentNote() {
     await FeaturePackService.recordFundingHistory('transaction', noteObj.id, currentNoteId ? 'Ubah pemasukan' : 'Pemasukan', finance.amount, [], { note: finance.incomeFrom || '' });
   }
 
-  // Save to IndexedDB & sync
-  await StorageService.saveNote(noteObj);
+  // Save to storage only after all funding changes are valid. If persistence fails,
+  // restore both the old note state and any source balances changed above.
+  try {
+    await StorageService.saveNote(noteObj);
+  } catch (saveErr) {
+    if (finance?.type === 'expense') {
+      try { FeaturePackService.applySavingsDelta(finance.funding || [], 1); } catch (rollbackErr) { console.warn('Rollback sumber dana baru gagal:', rollbackErr); }
+      if (previousNote?.finance?.type === 'expense') {
+        try { FeaturePackService.applySavingsDelta(previousNote.finance.funding || [{ id:'net', amount:Number(previousNote.finance.amount)||0 }], -1); } catch (rollbackErr) { console.warn('Rollback sumber dana lama gagal:', rollbackErr); }
+      }
+    } else if (previousNote?.finance?.type === 'expense' && !finance?.type) {
+      try { FeaturePackService.applySavingsDelta(previousNote.finance.funding || [{ id:'net', amount:Number(previousNote.finance.amount)||0 }], -1); } catch (rollbackErr) { console.warn('Rollback pengembalian sumber dana gagal:', rollbackErr); }
+    }
+    const idx = currentNoteId ? notes.findIndex(n => n.id === currentNoteId) : -1;
+    if (idx >= 0 && previousNote) notes[idx] = previousNote;
+    UIService.showToast('Catatan gagal disimpan. Perubahan saldo dibatalkan.', 'danger');
+    return;
+  }
   await UIService.updateStorageMeter();
 
   renderCategoryChips();
@@ -757,59 +773,89 @@ function renderAttachmentsList() {
   });
 }
 
+async function fileToAttachment(file) {
+  if (!file) throw new Error('Berkas tidak valid.');
+  if (file.size > 25 * 1024 * 1024) throw new Error('Ukuran berkas melebihi batas 25MB.');
+
+  let dataURL = null;
+  let finalSize = file.size;
+  let finalMime = file.type || 'application/octet-stream';
+  let finalExt = AttachmentService.fileExt(file.name);
+
+  if (file.type.startsWith('image/') && file.type !== 'image/svg+xml') {
+    try {
+      const comp = await AttachmentService.compressImage(file);
+      dataURL = comp.dataURL;
+      finalSize = comp.size;
+      finalMime = comp.mime;
+      finalExt = comp.ext;
+    } catch (e) {
+      dataURL = await AttachmentService.blobToDataURL(file);
+    }
+  } else {
+    dataURL = await AttachmentService.blobToDataURL(file);
+  }
+
+  let safeName = SecurityService.sanitizeFileName(file.name);
+  const originalExt = AttachmentService.fileExt(safeName);
+  if (finalExt && originalExt && finalExt !== originalExt && finalMime.startsWith('image/')) {
+    safeName = safeName.replace(/\.[^.]+$/, `.${finalExt}`);
+  }
+
+  return {
+    id: 'att_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    name: safeName,
+    mime: finalMime,
+    ext: finalExt,
+    size: finalSize,
+    dataURL,
+    kind: AttachmentService.classifyAttachment({ mime: finalMime, ext: finalExt }),
+    createdAt: Date.now()
+  };
+}
+
+function insertInlineAttachment(att) {
+  if (!att?.id) return;
+  const icon = AttachmentService.classifyAttachment(att) === 'image' ? '🖼️'
+    : AttachmentService.classifyAttachment(att) === 'pdf' ? '📄'
+    : AttachmentService.classifyAttachment(att) === 'doc' ? '📑'
+    : AttachmentService.classifyAttachment(att) === 'audio' ? '🎙️' : '📎';
+  const label = SecurityService.escapeHtml(att.name || 'Berkas');
+  const html = `<span class="cp104-inline-note" contenteditable="false" data-att-id="${SecurityService.escapeHtml(att.id)}" title="Ketuk untuk melihat berkas">${icon} ${label} <small>lihat</small></span>&nbsp;`;
+  EditorService.restoreSelection(el.noteBody);
+  EditorService.insertHtmlAtCursor(el.noteBody, html);
+}
+
+async function handleInlineFilesUpload(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  let inserted = 0;
+  for (let i = 0; i < fileList.length; i++) {
+    try {
+      const att = await fileToAttachment(fileList[i]);
+      currentAttachments.push(att);
+      insertInlineAttachment(att);
+      inserted++;
+    } catch (err) {
+      UIService.showToast(`Gagal menyisipkan berkas "${fileList[i]?.name || 'file'}": ${err.message}`, 'danger');
+    }
+  }
+  renderAttachmentsList();
+  if (inserted) UIService.showToast(`${inserted} berkas disisipkan ke dalam teks catatan.`, 'info');
+}
+
 async function handleFilesUpload(fileList) {
   if (!fileList || fileList.length === 0) return;
-
   for (let i = 0; i < fileList.length; i++) {
     const file = fileList[i];
-
-    // Check individual file size warning
-    if (file.size > 25 * 1024 * 1024) {
-      UIService.showToast(`Berkas "${file.name}" terlalu besar (>25MB). Mohon pilih berkas lebih kecil.`, 'danger');
-      continue;
-    }
-
     try {
-      let dataURL = null;
-      let finalSize = file.size;
-      let finalMime = file.type || 'application/octet-stream';
-      let finalExt = AttachmentService.fileExt(file.name);
-
-      // Canvas image compression for high-res images to conserve memory & storage
-      if (file.type.startsWith('image/') && file.type !== 'image/svg+xml') {
-        try {
-          const comp = await AttachmentService.compressImage(file);
-          dataURL = comp.dataURL;
-          finalSize = comp.size;
-          finalMime = comp.mime;
-          finalExt = comp.ext;
-        } catch (e) {
-          dataURL = await AttachmentService.blobToDataURL(file);
-        }
-      } else {
-        dataURL = await AttachmentService.blobToDataURL(file);
-      }
-
-      const att = {
-        id: 'att_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        name: SecurityService.sanitizeFileName(file.name),
-        mime: finalMime,
-        ext: finalExt,
-        size: finalSize,
-        dataURL,
-        kind: AttachmentService.classifyAttachment({ mime: finalMime, ext: finalExt }),
-        createdAt: Date.now()
-      };
-
+      const att = await fileToAttachment(file);
       currentAttachments.push(att);
     } catch (err) {
-      UIService.showToast(`Gagal memproses berkas "${file.name}": ${err.message}`, 'danger');
+      UIService.showToast(`Gagal memproses berkas "${file?.name || 'file'}": ${err.message}`, 'danger');
     }
   }
 
   renderAttachmentsList();
-
-  // Real-time Storage Quota Check
   try {
     const storageInfo = await StorageService.getStorageUsage();
     await UIService.updateStorageMeter();
@@ -819,6 +865,128 @@ async function handleFilesUpload(fileList) {
   } catch (e) {
     console.warn('Storage check warning:', e);
   }
+}
+
+
+async function unzipEntries(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u32 = (o) => view.getUint32(o, true);
+  const u16 = (o) => view.getUint16(o, true);
+  let eocd = -1;
+  const start = Math.max(0, bytes.length - 65557);
+  for (let i = bytes.length - 22; i >= start; i--) {
+    if (u32(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Format ZIP/Office Open XML tidak valid.');
+
+  const count = u16(eocd + 10);
+  const centralOffset = u32(eocd + 16);
+  const entries = new Map();
+  let pos = centralOffset;
+
+  for (let i = 0; i < count; i++) {
+    if (u32(pos) !== 0x02014b50) throw new Error('Struktur ZIP tidak valid.');
+    const method = u16(pos + 10);
+    const compressedSize = u32(pos + 20);
+    const nameLen = u16(pos + 28);
+    const extraLen = u16(pos + 30);
+    const commentLen = u16(pos + 32);
+    const localOffset = u32(pos + 42);
+    const name = new TextDecoder().decode(bytes.slice(pos + 46, pos + 46 + nameLen));
+    entries.set(name, { method, compressedSize, localOffset });
+    pos += 46 + nameLen + extraLen + commentLen;
+  }
+
+  const read = async (name) => {
+    const entry = entries.get(name);
+    if (!entry) return null;
+    const local = entry.localOffset;
+    if (u32(local) !== 0x04034b50) throw new Error('Header berkas ZIP tidak valid.');
+    const nameLen = u16(local + 26);
+    const extraLen = u16(local + 28);
+    const dataStart = local + 30 + nameLen + extraLen;
+    const compressed = bytes.slice(dataStart, dataStart + entry.compressedSize);
+    if (entry.method === 0) return compressed;
+    if (entry.method !== 8 || typeof DecompressionStream === 'undefined') {
+      throw new Error('Perangkat ini tidak mendukung pembacaan kompresi Office secara langsung.');
+    }
+    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  };
+  return { names: [...entries.keys()], read };
+}
+
+function xmlDocument(bytes) {
+  return new DOMParser().parseFromString(new TextDecoder('utf-8').decode(bytes), 'application/xml');
+}
+function xmlText(node) {
+  return String(node?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+async function previewOfficeOpenXml(fullAtt, kind) {
+  const buffer = await AttachmentService.dataURLToArrayBuffer(fullAtt.dataURL);
+  const zip = await unzipEntries(buffer);
+
+  if (kind === 'docx') {
+    const xml = await zip.read('word/document.xml');
+    if (!xml) throw new Error('Isi dokumen Word tidak ditemukan.');
+    const doc = xmlDocument(xml);
+    const blocks = [...doc.getElementsByTagNameNS('*', 'p')].map((p) => {
+      const text = [...p.getElementsByTagNameNS('*', 't')].map(xmlText).join('');
+      return text;
+    }).filter(Boolean);
+    return `<div class="viewer-doc"><h3>Pratinjau Word</h3>${blocks.length ? blocks.map((t) => `<p>${SecurityService.escapeHtml(t)}</p>`).join('') : '<p>Dokumen tidak memiliki teks yang dapat ditampilkan.</p>'}</div>`;
+  }
+
+  if (kind === 'pptx') {
+    const slideNames = zip.names.filter((n) => /^ppt\/slides\/slide\d+\.xml$/i.test(n)).sort((a,b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (!slideNames.length) throw new Error('Slide PowerPoint tidak ditemukan.');
+    const slides = [];
+    for (let i = 0; i < slideNames.length; i++) {
+      const xml = await zip.read(slideNames[i]);
+      const doc = xmlDocument(xml);
+      const texts = [...doc.getElementsByTagNameNS('*', 't')].map(xmlText).filter(Boolean);
+      slides.push(`<section class="viewer-slide"><h4>Slide ${i + 1}</h4>${texts.map((t) => `<p>${SecurityService.escapeHtml(t)}</p>`).join('')}</section>`);
+    }
+    return `<div class="viewer-doc"><h3>Pratinjau PowerPoint</h3>${slides.join('')}</div>`;
+  }
+
+  // XLSX: tampilkan sheet pertama sebagai tabel tanpa membutuhkan SheetJS.
+  const sharedXml = await zip.read('xl/sharedStrings.xml');
+  const shared = [];
+  if (sharedXml) {
+    const doc = xmlDocument(sharedXml);
+    for (const si of [...doc.getElementsByTagNameNS('*', 'si')]) {
+      shared.push([...si.getElementsByTagNameNS('*', 't')].map(xmlText).join(''));
+    }
+  }
+  const sheetName = zip.names.find((n) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(n));
+  if (!sheetName) throw new Error('Lembar Excel tidak ditemukan.');
+  const sheetXml = await zip.read(sheetName);
+  const sheet = xmlDocument(sheetXml);
+  const columnIndex = (ref) => {
+    const letters = String(ref || '').replace(/\d+$/, '').toUpperCase();
+    let n = 0;
+    for (const ch of letters) n = n * 26 + ch.charCodeAt(0) - 64;
+    return Math.max(0, n - 1);
+  };
+  const rows = [];
+  for (const row of [...sheet.getElementsByTagNameNS('*', 'row')]) {
+    const cells = [];
+    for (const cell of [...row.getElementsByTagNameNS('*', 'c')]) {
+      const type = cell.getAttribute('t') || '';
+      const valueNode = cell.getElementsByTagNameNS('*', 'v')[0];
+      let value = valueNode ? xmlText(valueNode) : '';
+      if (type === 's') value = shared[Number(value)] ?? value;
+      if (type === 'inlineStr') value = [...cell.getElementsByTagNameNS('*', 't')].map(xmlText).join('');
+      cells[columnIndex(cell.getAttribute('r'))] = value;
+    }
+    if (cells.some((value) => value !== undefined && value !== '')) rows.push(cells);
+  }
+  const colCount = Math.max(1, ...rows.map((r) => r.length));
+  const html = rows.slice(0, 300).map((row) => `<tr>${Array.from({length: colCount}, (_, i) => `<td>${SecurityService.escapeHtml(row[i] ?? '')}</td>`).join('')}</tr>`).join('');
+  return `<div class="viewer-table"><h3>Pratinjau Excel</h3><div class="viewer-table-scroll"><table><tbody>${html || '<tr><td>Tidak ada data yang dapat ditampilkan.</td></tr>'}</tbody></table></div><p class="viewer-note">Pratinjau menampilkan maksimal 300 baris dari lembar pertama.</p></div>`;
 }
 
 async function previewAttachment(att) {
@@ -880,12 +1048,35 @@ async function previewAttachment(att) {
       audio.className = 'w-full my-6';
       el.viewerBody.appendChild(audio);
     } else if (kind === 'pdf') {
-      const blob = await AttachmentService.dataURLToBlob(fullAtt.dataURL);
-      const blobUrl = AttachmentService.createManagedBlobUrl(blob);
-      const iframe = document.createElement('iframe');
-      iframe.src = blobUrl;
-      iframe.className = 'viewer-iframe';
-      el.viewerBody.appendChild(iframe);
+      const pdfPlugin = window.Capacitor?.Plugins?.PdfViewer;
+      if (window.Capacitor?.isNativePlatform?.() && pdfPlugin?.render) {
+        const base64 = String(fullAtt.dataURL).split(',')[1] || '';
+        const result = await pdfPlugin.render({ base64 });
+        const pages = Array.isArray(result?.pages) ? result.pages : [];
+        if (!pages.length) throw new Error('PDF tidak memiliki halaman yang dapat ditampilkan.');
+        const wrap = document.createElement('div');
+        wrap.className = 'viewer-pdf-pages';
+        pages.forEach((src, index) => {
+          const page = document.createElement('div');
+          page.className = 'viewer-pdf-page';
+          page.innerHTML = `<div class="viewer-pdf-label">Halaman ${index + 1}${result.totalPages > result.shownPages && index === pages.length - 1 ? ` dari ${result.totalPages} (maksimal ${result.shownPages} halaman ditampilkan)` : ''}</div>`;
+          const img = document.createElement('img');
+          img.src = src;
+          img.alt = `Halaman ${index + 1}`;
+          page.appendChild(img);
+          wrap.appendChild(page);
+        });
+        el.viewerBody.appendChild(wrap);
+      } else {
+        const blob = await AttachmentService.dataURLToBlob(fullAtt.dataURL);
+        const blobUrl = AttachmentService.createManagedBlobUrl(blob);
+        const frame = document.createElement('object');
+        frame.data = blobUrl;
+        frame.type = 'application/pdf';
+        frame.className = 'viewer-frame';
+        frame.innerHTML = '<div class="viewer-fallback">Pratinjau PDF menggunakan kemampuan browser. Pada WebView yang tidak memiliki PDF renderer, gunakan tombol Unduh.</div>';
+        el.viewerBody.appendChild(frame);
+      }
     } else if (kind === 'text') {
       const text = AttachmentService.decodeBase64Text(fullAtt.dataURL);
       const pre = document.createElement('pre');
@@ -909,6 +1100,10 @@ async function previewAttachment(att) {
       tableDiv.className = 'viewer-table';
       tableDiv.innerHTML = SecurityService.sanitizeHTML(htmlTable);
       el.viewerBody.appendChild(tableDiv);
+    } else if (kind === 'doc' && ['docx','xlsx','xls','pptx'].includes((fullAtt.ext || '').toLowerCase())) {
+      const ext = (fullAtt.ext || '').toLowerCase();
+      const html = await previewOfficeOpenXml(fullAtt, ext);
+      el.viewerBody.innerHTML = SecurityService.sanitizeHTML(html);
     } else {
       el.viewerBody.innerHTML = `
         <div class="text-center py-12 text-[var(--ink-soft)]">
@@ -1384,6 +1579,13 @@ function bindEventListeners() {
 
   el.noteTitle.addEventListener('input', handleAutoCategory);
   el.noteBody.addEventListener('input', handleAutoCategory);
+  el.noteBody.addEventListener('click', (event) => {
+    const chip = event.target.closest('.cp104-inline-note');
+    if (!chip) return;
+    const id = chip.getAttribute('data-att-id');
+    const att = currentAttachments.find((item) => item.id === id);
+    if (att) previewAttachment(att);
+  });
 
   el.categorySelect.onchange = () => {
     const isFin = el.categorySelect.value === 'keuangan';
@@ -1408,6 +1610,17 @@ function bindEventListeners() {
     handleFilesUpload(e.target.files);
     el.fileInput.value = '';
   };
+
+  if (el.insertFileBtn && el.inlineFileInput) {
+    el.insertFileBtn.onclick = () => {
+      EditorService.captureSelection(el.noteBody);
+      el.inlineFileInput.click();
+    };
+    el.inlineFileInput.onchange = async (e) => {
+      await handleInlineFilesUpload(e.target.files);
+      el.inlineFileInput.value = '';
+    };
+  }
 
   el.dropZone.ondragover = (e) => {
     e.preventDefault();
@@ -1977,13 +2190,35 @@ async function init() {
       updateVersionText: el.updateVersionText,
       updateStatusText: el.updateStatusText
     };
-    UpdateService.init(updateElements, APP_VERSION);
+    const showUpdateResult = async (options = {}) => {
+      const result = await UpdateService.check(updateElements, APP_VERSION, options);
+      if (result?.available && !result.dismissed) {
+        if (el.updateBadgeBtn) {
+          el.updateBadgeBtn.style.display = 'inline-flex';
+          el.updateBadgeBtn.textContent = `⬆️ Update ${result.version}`;
+          el.updateBadgeBtn.onclick = () => el.updateModalOverlay?.classList.add('open');
+        }
+        if (!options.silent) UIService.showToast(`Versi baru ${result.version} tersedia.`, 'info', 'Lihat', () => el.updateModalOverlay?.classList.add('open'), 7000);
+      }
+      return result;
+    };
+    UpdateService.init(updateElements, APP_VERSION).then((result) => {
+      if (result?.available && !result.dismissed && el.updateBadgeBtn) {
+        el.updateBadgeBtn.style.display = 'inline-flex';
+        el.updateBadgeBtn.textContent = `⬆️ Update ${result.version}`;
+        el.updateBadgeBtn.onclick = () => el.updateModalOverlay?.classList.add('open');
+      }
+    }).catch(() => {});
     // Android/WebView kadang baru memiliki koneksi internet beberapa saat setelah startup.
-    // Cek lagi setelah UI siap dan setiap aplikasi kembali ke foreground.
-    setTimeout(() => UpdateService.check(updateElements, APP_VERSION, { silent: false }), 2500);
+    // Cek setelah UI siap, saat koneksi pulih, saat kembali ke foreground, dan berkala.
+    setTimeout(() => showUpdateResult({ silent: false }), 2500);
+    window.addEventListener('online', () => setTimeout(() => showUpdateResult({ silent: false }), 500));
     CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) setTimeout(() => UpdateService.check(updateElements, APP_VERSION, { silent: false }), 800);
+      if (isActive) setTimeout(() => showUpdateResult({ silent: false }), 800);
     });
+    setInterval(() => {
+      if (navigator.onLine !== false) showUpdateResult({ silent: false });
+    }, 6 * 60 * 60 * 1000);
   } catch (updErr) {
     console.warn('UpdateService init notice:', updErr);
   }
@@ -2068,6 +2303,21 @@ async function init() {
         document.dispatchEvent(new Event('cp104:refresh'));
       },
       openNewNoteWithAttachment: (attachment) => {
+        openNoteEditor(null);
+        currentAttachments = [attachment];
+        renderAttachmentsList();
+        UIService.showToast('Lampiran gambar sudah ditambahkan. Isi judul lalu simpan catatan.', 'info');
+      },
+      captureEditorSelection: () => EditorService.captureSelection(el.noteBody),
+      addAttachmentToCurrentNote: (attachment) => {
+        if (currentNoteId && el.overlay.classList.contains('open')) {
+          currentAttachments.push(attachment);
+          EditorService.restoreSelection(el.noteBody);
+          insertInlineAttachment(attachment);
+          renderAttachmentsList();
+          UIService.showToast('Gambar beranotasi ditambahkan tanpa menghapus lampiran sebelumnya.', 'info');
+          return;
+        }
         openNoteEditor(null);
         currentAttachments = [attachment];
         renderAttachmentsList();
