@@ -32,6 +32,23 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Verify npm manifest and lockfile
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const root = lock.packages?.[''];
+          if (!root) throw new Error('package-lock.json has no root package entry');
+          if (root.name !== pkg.name || root.version !== pkg.version) throw new Error(`Lock root ${root.name}@${root.version} does not match ${pkg.name}@${pkg.version}`);
+          for (const field of ['dependencies','devDependencies']) {
+            const a = JSON.stringify(pkg[field] || {});
+            const b = JSON.stringify(root[field] || {});
+            if (a !== b) throw new Error(`package.json and package-lock.json ${field} are out of sync`);
+          }
+          if (!lock.packages['node_modules/@capacitor/app']) throw new Error('Missing @capacitor/app in lockfile');
+          NODE
+
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
@@ -68,14 +85,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Gradle
+      - name: Prepare Gradle wrapper
+        working-directory: android
+        run: chmod +x gradlew
+
+      - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
 
       - name: Build debug APK
         working-directory: android
-        run: gradle --no-daemon --stacktrace clean assembleDebug
+        run: ./gradlew --no-daemon --stacktrace clean assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -99,6 +118,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Verify npm manifest and lockfile
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const root = lock.packages?.[''];
+          if (!root) throw new Error('package-lock.json has no root package entry');
+          if (root.name !== pkg.name || root.version !== pkg.version) throw new Error(`Lock root ${root.name}@${root.version} does not match ${pkg.name}@${pkg.version}`);
+          for (const field of ['dependencies','devDependencies']) {
+            const a = JSON.stringify(pkg[field] || {});
+            const b = JSON.stringify(root[field] || {});
+            if (a !== b) throw new Error(`package.json and package-lock.json ${field} are out of sync`);
+          }
+          if (!lock.packages['node_modules/@capacitor/app']) throw new Error('Missing @capacitor/app in lockfile');
+          NODE
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -143,14 +179,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Gradle
+      - name: Prepare Gradle wrapper
+        working-directory: android
+        run: chmod +x gradlew
+
+      - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
 
       - name: Build compatibility release APK
         working-directory: android
-        run: gradle --no-daemon --stacktrace clean assembleRelease
+        run: ./gradlew --no-daemon --stacktrace clean assembleRelease
 
       - name: Verify APK signature
         run: |
