@@ -28,7 +28,7 @@ export const SecurityService = {
         'UL','OL','LI','BLOCKQUOTE','PRE','CODE','TABLE','THEAD','TBODY',
         'TFOOT','TR','TH','TD','HR','H1','H2','H3','H4','H5','H6','IMG'
       ]);
-      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src','data-att-id','contenteditable']);
+      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src','data-att-id','data-cp104-caret','contenteditable','style']);
       const nodes = Array.from(doc.body.querySelectorAll('*'));
 
       for (const node of nodes) {
@@ -57,6 +57,11 @@ export const SecurityService = {
 
           if (name === 'class' && /(?:url\(|expression\(|javascript:)/i.test(value)) {
             node.removeAttribute(attr.name);
+          }
+          if (name === 'style') {
+            const safeStyle = value.replace(/(?:url\s*\(|expression\s*\(|javascript\s*:|@import|behavior\s*:|-moz-binding)/ig, '');
+            const allowedStyle = safeStyle.split(';').map(part => part.trim()).filter(part => /^(text-align|font-weight|font-style|text-decoration|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|font-size|line-height|width|max-width|min-width|border(?:-[a-z-]+)?|background-color)\s*:[^;]+$/i.test(part)).join('; ');
+            if (allowedStyle) node.setAttribute('style', allowedStyle); else node.removeAttribute('style');
           }
         }
       }

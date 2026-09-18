@@ -67,6 +67,8 @@ export const FeaturePackService = {
   calDate: new Date(),
   selectedDate: today(),
   _bound: false,
+  _imageEditAttachmentId: null,
+  _imageInsertionMarkerId: null,
 
   init(ctx) {
     this.ctx = ctx;
@@ -227,8 +229,8 @@ export const FeaturePackService = {
       const icon = window.prompt('Ikon (opsional):', '📁') || '📁';
       await this.ctx.addCategory({ id: uid('cat'), name: name.trim(), icon, color: '#3d5a6b', core: false });
     });
-    document.getElementById('cp104ImageBtn')?.addEventListener('mousedown', () => { try { this.ctx.captureEditorSelection?.(); } catch (_) {} });
-    document.getElementById('cp104ImageBtn')?.addEventListener('click', () => this.openImageEditor());
+    document.getElementById('cp104ImageBtn')?.addEventListener('mousedown', () => { try { this._imageInsertionMarkerId = this.ctx.createEditorInsertionMarker?.() || null; } catch (_) { this._imageInsertionMarkerId = null; } });
+    document.getElementById('cp104ImageBtn')?.addEventListener('click', () => this.openImageEditor(null, this._imageInsertionMarkerId));
     document.getElementById('cp104BatchDelete').onclick = () => this.batchDelete();
     document.getElementById('cp104BatchMove').onclick = () => this.batchMove();
     document.getElementById('cp104BatchExport').onclick = () => this.batchExport();
@@ -655,22 +657,53 @@ export const FeaturePackService = {
     modal.innerHTML = '<div class="cp104-dialog"><div class="cp104-head"><div class="cp104-title">🖼️ Anotasi Gambar</div><button type="button" class="cp104-btn" id="cp104ImgClose">Tutup</button></div><div class="cp104-tools"><button type="button" data-tool="pen">✏️ Pena</button><button type="button" data-tool="line">╱ Garis</button><button type="button" data-tool="rect">□ Kotak</button><button type="button" data-tool="ellipse">○ Elips</button><button type="button" data-tool="arrow">➜ Panah</button><button type="button" data-tool="eraser">⌫ Penghapus</button><button type="button" id="cp104ImgText">Teks</button><input type="color" id="cp104ImgColor" value="#a3402f"><input type="range" id="cp104ImgSize" min="1" max="20" value="4"><button type="button" id="cp104ImgUndo">Undo</button><button type="button" id="cp104ImgRedo">Redo</button><button type="button" id="cp104ImgClear">Bersihkan</button></div><div class="cp104-canvas-wrap"><canvas id="cp104ImgBase"></canvas><canvas id="cp104ImgDraw"></canvas><canvas id="cp104ImgTextLayer"></canvas></div><div class="cp104-actions" style="justify-content:flex-end;margin-top:8px"><button type="button" class="cp104-btn" id="cp104ImgCancel">Batal</button><button type="button" class="cp104-btn primary" id="cp104ImgSave">Simpan sebagai lampiran</button></div></div>';
     document.body.appendChild(modal);
     const base = modal.querySelector('#cp104ImgBase'); const draw = modal.querySelector('#cp104ImgDraw'); const textLayer = modal.querySelector('#cp104ImgTextLayer'); ImageEditorService.init(base, draw, textLayer);
-    modal.querySelector('#cp104ImgClose').onclick = modal.querySelector('#cp104ImgCancel').onclick = () => modal.classList.remove('open');
+    modal.querySelector('#cp104ImgClose').onclick = modal.querySelector('#cp104ImgCancel').onclick = () => { modal.classList.remove('open'); this._imageEditAttachmentId=null; if(this._imageInsertionMarkerId){this.ctx.removeEditorInsertionMarker?.(this._imageInsertionMarkerId);this._imageInsertionMarkerId=null;} };
     modal.querySelectorAll('[data-tool]').forEach((button) => button.onclick = () => ImageEditorService.setTool(button.dataset.tool));
     modal.querySelector('#cp104ImgColor').oninput = (e) => ImageEditorService.setColor(e.target.value);
     modal.querySelector('#cp104ImgSize').oninput = (e) => ImageEditorService.setSize(e.target.value);
-    modal.querySelector('#cp104ImgUndo').onclick = () => ImageEditorService.undo(); modal.querySelector('#cp104ImgRedo').onclick = () => ImageEditorService.redo(); modal.querySelector('#cp104ImgClear').onclick = () => ImageEditorService.clear();
-    modal.querySelector('#cp104ImgText').onclick = () => { ImageEditorService.setTool('text'); const text = window.prompt('Teks anotasi (setelah muncul, seret teks untuk memindahkannya):'); if (text) { const item = ImageEditorService.addText(Math.round(ImageEditorService.width * 0.12), Math.round(ImageEditorService.height * 0.18), text); if (item) this.ctx.toast('Teks ditambahkan. Pilih alat Teks lalu seret teks untuk memindahkannya.', 'info'); } };
-    modal.querySelector('#cp104ImgSave').onclick = () => { const data = ImageEditorService.exportFlattened(); const att = { id: uid('img'), name: `anotasi_${today()}.png`, mime: 'image/png', ext: 'png', size: Math.round(data.length * .75), dataURL: data, kind: 'image', createdAt: Date.now() }; this.ctx.addAttachmentToCurrentNote ? this.ctx.addAttachmentToCurrentNote(att) : this.ctx.openNewNoteWithAttachment(att); modal.classList.remove('open'); };
+    modal.querySelector('#cp104ImgUndo').onclick = () => ImageEditorService.undo();
+    modal.querySelector('#cp104ImgRedo').onclick = () => ImageEditorService.redo();
+    modal.querySelector('#cp104ImgClear').onclick = () => ImageEditorService.clear();
+    modal.querySelector('#cp104ImgText').onclick = () => { ImageEditorService.setTool('text'); const text = window.prompt('Teks anotasi (setelah muncul, pilih alat Teks lalu seret teks untuk memindahkannya):'); if (text) { const item = ImageEditorService.addText(Math.round(ImageEditorService.width * 0.12), Math.round(ImageEditorService.height * 0.18), text); if (item) this.ctx.toast('Teks ditambahkan. Pilih alat Teks lalu seret teks untuk memindahkannya.', 'info'); } };
+    modal.querySelector('#cp104ImgSave').onclick = () => {
+      try {
+        const data = ImageEditorService.exportFlattened();
+        const id = this._imageEditAttachmentId || uid('img');
+        const old = this.ctx.getCurrentAttachment?.(id);
+        const att = { id, name: this._imageEditAttachmentId ? (old?.name || `anotasi_${today()}.png`) : `anotasi_${today()}.png`, mime: 'image/png', ext: 'png', size: Math.round(data.length * .75), dataURL: data, kind: 'image', createdAt: old?.createdAt || Date.now() };
+        if (this._imageEditAttachmentId) {
+          const ok = this.ctx.replaceAttachmentInCurrentNote?.(att, id);
+          if (!ok) throw new Error('Catatan yang memuat lampiran sudah tidak aktif. Perubahan dibatalkan.');
+          this.ctx.toast('Anotasi gambar diperbarui tanpa menghapus isi catatan atau lampiran lain.', 'info');
+        } else {
+          const ok = this.ctx.addAttachmentToCurrentNote?.(att, { markerId: this._imageInsertionMarkerId });
+          if (!ok) throw new Error('Catatan yang sedang diedit tidak ditemukan.');
+          this.ctx.toast('Gambar beranotasi ditambahkan tanpa menghapus isi atau lampiran sebelumnya.', 'info');
+        }
+        this._imageEditAttachmentId=null; this._imageInsertionMarkerId=null; modal.classList.remove('open');
+      } catch (error) { this.ctx.toast(error.message || 'Gagal menyimpan anotasi.', 'danger'); }
+    };
   },
 
-  openImageEditor() {
+  async openImageEditor(sourceAttachment = null, markerId = null) {
     if (!document.getElementById('cp104ImageModal')) this.buildImageModal();
-    let input = document.getElementById('cp104ImagePicker');
-    if (!input) {
-      input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.id = 'cp104ImagePicker'; input.style.display = 'none'; document.body.appendChild(input);
-      input.onchange = () => { const file = input.files?.[0]; input.value = ''; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { await ImageEditorService.loadImage(reader.result); document.getElementById('cp104ImageModal').classList.add('open'); } catch (error) { this.ctx.toast(error.message, 'danger'); } }; reader.readAsDataURL(file); };
+    this._imageEditAttachmentId = sourceAttachment?.id || null;
+    this._imageInsertionMarkerId = markerId || null;
+    if (sourceAttachment) {
+      try {
+        const dataURL = sourceAttachment.dataURL || await this.ctx.getAttachmentData?.(sourceAttachment);
+        if (!dataURL) throw new Error('Data gambar tidak ditemukan.');
+        await ImageEditorService.loadImage(dataURL);
+        const modal=document.getElementById('cp104ImageModal'); modal.querySelector('#cp104ImgSave').textContent='💾 Simpan Perubahan'; modal.querySelector('.cp104-title').textContent='🖼️ Edit / Anotasi Gambar'; modal.classList.add('open');
+      } catch (error) { this.ctx.toast(error.message, 'danger'); this._imageEditAttachmentId=null; }
+      return;
     }
+    const input = document.getElementById('cp104ImagePicker') || (() => { const i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.id='cp104ImagePicker'; i.style.display='none'; document.body.appendChild(i); return i; })();
+    input.onchange = () => {
+      const file=input.files?.[0]; input.value='';
+      if(!file){ if(this._imageInsertionMarkerId)this.ctx.removeEditorInsertionMarker?.(this._imageInsertionMarkerId); this._imageInsertionMarkerId=null; return; }
+      const reader=new FileReader(); reader.onload=async()=>{ try { await ImageEditorService.loadImage(reader.result); const modal=document.getElementById('cp104ImageModal'); modal.querySelector('#cp104ImgSave').textContent='📥 Simpan sebagai Lampiran'; modal.querySelector('.cp104-title').textContent='🖼️ Anotasi Gambar'; modal.classList.add('open'); } catch(error){ this.ctx.toast(error.message,'danger'); if(this._imageInsertionMarkerId)this.ctx.removeEditorInsertionMarker?.(this._imageInsertionMarkerId); this._imageInsertionMarkerId=null; } }; reader.readAsDataURL(file);
+    };
     input.click();
   }
 };

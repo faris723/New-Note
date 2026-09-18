@@ -6,6 +6,72 @@
 
 export const EditorService = {
 
+  /**
+   * Creates a DOM bookmark at the current caret. Unlike a cloned Range, the
+   * bookmark survives Android/WebView file pickers and modal focus changes.
+   */
+  createInsertionMarker(targetElement) {
+    if (!targetElement) return null;
+    const sel = window.getSelection();
+    let range = null;
+    if (sel && sel.rangeCount) {
+      const candidate = sel.getRangeAt(0);
+      if (targetElement.contains(candidate.commonAncestorContainer)) range = candidate.cloneRange();
+    }
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(targetElement);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    const id = `cp104_caret_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const marker = document.createElement('span');
+    marker.setAttribute('data-cp104-caret', id);
+    marker.setAttribute('contenteditable', 'false');
+    marker.textContent = '\u200b';
+    range.insertNode(marker);
+    const after = document.createRange();
+    after.setStartAfter(marker); after.collapse(true);
+    if (sel) { sel.removeAllRanges(); sel.addRange(after); }
+    this._savedMarker = { target: targetElement, id };
+    targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+    return id;
+  },
+
+  /** Insert HTML exactly where createInsertionMarker() placed the bookmark. */
+  insertHtmlAtMarker(targetElement, markerId, htmlString) {
+    if (!targetElement || !markerId) return false;
+    const marker = targetElement.querySelector(`[data-cp104-caret="${String(markerId).replace(/"/g, "")}"]`);
+    if (!marker) return false;
+    const template = document.createElement('template');
+    template.innerHTML = String(htmlString || '').trim();
+    const fragment = template.content;
+    const lastNode = fragment.lastChild;
+    marker.replaceWith(fragment);
+    if (lastNode) {
+      const range = document.createRange();
+      range.setStartAfter(lastNode); range.collapse(true);
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    }
+    this._savedMarker = null;
+    targetElement.focus();
+    targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  },
+
+  removeInsertionMarker(targetElement, markerId) {
+    if (!targetElement || !markerId) return;
+    const marker = targetElement.querySelector(`[data-cp104-caret="${String(markerId).replace(/"/g, "")}"]`);
+    if (marker) marker.remove();
+    if (this._savedMarker?.id === markerId) this._savedMarker = null;
+  },
+
+  clearInsertionMarker() {
+    const saved = this._savedMarker;
+    if (saved?.target && saved.id) this.removeInsertionMarker(saved.target, saved.id);
+  },
+
   /** Save the current contenteditable selection so a file picker or modal can open without losing the caret. */
   captureSelection(targetElement) {
     if (!targetElement) return null;
