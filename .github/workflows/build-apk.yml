@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.8 untuk membuat release APK kompatibel dengan versi lama.'
+        description: 'Kosongkan untuk build debug. Isi misalnya v1.0.9 untuk membuat release APK kompatibel dengan versi lama.'
         required: false
         type: string
 
@@ -39,6 +39,15 @@ jobs:
 
       - name: Sync Capacitor Android
         run: npx cap sync android
+      - name: Verify fresh web bundle is packaged
+        run: |
+          BUNDLE=$(find android/app/src/main/assets/public/assets -maxdepth 1 -type f -name 'index-*.js' | head -n 1)
+          test -n "$BUNDLE"
+          grep -q 'cp104ImageBtn' "$BUNDLE"
+          grep -q 'insertFileBtn' "$BUNDLE"
+          grep -q 'cp104-inline-note' "$BUNDLE"
+          grep -q 'cp104FileEditModal' "$BUNDLE"
+          test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
 
       - name: Restore required Android project files
         run: |
@@ -97,6 +106,16 @@ jobs:
 
       - name: Sync Capacitor Android
         run: npx cap sync android
+
+      - name: Verify fresh web bundle is packaged
+        run: |
+          BUNDLE=$(find android/app/src/main/assets/public/assets -maxdepth 1 -type f -name 'index-*.js' | head -n 1)
+          test -n "$BUNDLE"
+          grep -q 'cp104ImageBtn' "$BUNDLE"
+          grep -q 'insertFileBtn' "$BUNDLE"
+          grep -q 'cp104-inline-note' "$BUNDLE"
+          grep -q 'cp104FileEditModal' "$BUNDLE"
+          test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
 
       - name: Verify release tag matches app version
         run: |
