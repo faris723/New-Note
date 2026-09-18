@@ -1455,8 +1455,8 @@ function bindEventListeners() {
     renderNotesList();
   };
 
-  // Finance Modal
-  el.financeBtn.onclick = openFinanceModal;
+  // Finance shortcut: arahkan ke tool Keuangan baru agar tidak ada dua logika keuangan berbeda.
+  el.financeBtn.onclick = () => FeaturePackService.switchTab('finance');
   el.closeFinanceBtn.onclick = () => el.financeOverlay.classList.remove('open');
   el.closeFinanceTopBtn.onclick = () => el.financeOverlay.classList.remove('open');
   el.financeFrom.onchange = updateFinanceView;
@@ -2036,7 +2036,7 @@ async function init() {
     console.warn('ReminderService notice:', remErr);
   }
 
-  // Feature pack 1.0.5: keuangan, jadwal, batch tools, kategori cepat, anotasi gambar.
+  // Feature pack: keuangan, jadwal, batch tools, kategori cepat, anotasi gambar.
   try {
     FeaturePackService.init({
       getNotes: () => notes,
