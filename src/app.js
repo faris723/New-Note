@@ -2855,7 +2855,7 @@ async function init() {
         if (el.categorySelect) { el.categorySelect.value = cat.id; el.categorySelect.dispatchEvent(new Event('change')); }
         UIService.showToast(`Kategori "${cat.name}" berhasil dibuat.`, 'info');
       },
-      toast: (message, type='info') => UIService.showToast(message, type),
+      toast: (message, type='info', duration) => UIService.showToast(message, type, null, null, duration),
       getSelectedIds: () => Array.from(selectedNoteIds),
       clearSelection: () => { selectedNoteIds.clear(); isSelectMode = false; updateSelectModeUI(); renderNotesList(); },
       batchDelete: async (ids) => {
