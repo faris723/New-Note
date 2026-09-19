@@ -86,13 +86,14 @@ async function fetchLatestReleaseFromAtom() {
 }
 
 async function fetchLatestRelease() {
-  try {
-    const latest = normalizeRelease(await fetchJson(LATEST_RELEASE_API_URL));
-    if (latest) return latest;
-  } catch (error) {
-    console.warn('GitHub latest-release API notice:', error);
-  }
-
+  // PENTING: daftar release (diurutkan manual berdasarkan nomor versi tertinggi)
+  // dicoba LEBIH DULU. Endpoint /releases/latest milik GitHub menentukan "latest"
+  // berdasarkan TANGGAL TERBIT, bukan nomor versi tertinggi — jadi kalau ada rilis
+  // versi lama yang diterbitkan ulang (misal proses build/compat testing yang
+  // menjalankan ulang workflow dengan release_tag versi lama), /releases/latest
+  // bisa saja masih menunjuk ke versi lama walau versi lebih baru sudah ada.
+  // Ini pernah benar-benar terjadi di riwayat rilis repo ini (v1.0.2 diterbitkan
+  // setelah v1.0.3), sehingga fitur cek-update gagal mendeteksi versi terbaru.
   try {
     const releases = await fetchJson(RELEASES_API_URL);
     const candidate = (Array.isArray(releases) ? releases : [])
@@ -102,6 +103,13 @@ async function fetchLatestRelease() {
     if (candidate) return candidate;
   } catch (error) {
     console.warn('GitHub releases API notice:', error);
+  }
+
+  try {
+    const latest = normalizeRelease(await fetchJson(LATEST_RELEASE_API_URL));
+    if (latest) return latest;
+  } catch (error) {
+    console.warn('GitHub latest-release API notice:', error);
   }
 
   // Fallback khusus WebView: GitHub Releases Atom biasanya tidak membutuhkan
