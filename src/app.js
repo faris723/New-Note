@@ -2185,14 +2185,16 @@ function bindEventListeners() {
       el.importStatusMsg.className = 'status-msg';
       el.importStatusMsg.textContent = mode === 'replace' ? 'Menghapus data lama dan menyiapkan cadangan…' : 'Menggabungkan cadangan dengan data saat ini…';
 
+      const previousNotesSnapshot = [...notes];
+      const previousCategoriesSnapshot = [...categories];
+      const previousFinanceState = StorageService.getFinanceState();
+
       if (mode === 'replace') {
-        const oldIds = notes.map(n => n.id);
-        for (let i = 0; i < oldIds.length; i++) {
-          await StorageService.deleteNote(oldIds[i]);
-          if (i % 2 === 0) await new Promise(r => setTimeout(r, 0));
-        }
+        // IMPORTANT: never delete the current dataset before the replacement
+        // snapshot has been written successfully. StorageService.saveNotes()
+        // commits the new state first and cleans obsolete attachments after.
         notes = [...incoming];
-        categories = [...CORE_CATEGORIES];
+        categories = [...CORE_CATEGORIES, ...(pendingImportData.categories || [])];
       } else {
         const existingIds = new Set(notes.map(n => n.id));
         const newNotes = incoming.filter(n => !existingIds.has(n.id));
@@ -2215,15 +2217,16 @@ function bindEventListeners() {
           const ids = new Set(current.map(x => x && x.id).filter(Boolean));
           return current.concat(incomingItems.filter(x => !x?.id || !ids.has(x.id)));
         };
-        const oldOb = JSON.parse(localStorage.getItem('cp_obligations_v2') || '[]');
-        const oldSav = JSON.parse(localStorage.getItem('cp_savings_v2') || '[]');
-        const oldHist = JSON.parse(localStorage.getItem('cp_finance_history_v1') || '[]');
-        localStorage.setItem('cp_obligations_v2', JSON.stringify(mergeArray(Array.isArray(oldOb)?oldOb:[], fs.obligations)));
-        localStorage.setItem('cp_savings_v2', JSON.stringify(mergeArray(Array.isArray(oldSav)?oldSav:[], fs.savings)));
-        localStorage.setItem('cp_finance_history_v1', JSON.stringify(mergeArray(Array.isArray(oldHist)?oldHist:[], fs.history)));
+        StorageService.saveFinanceState({
+          obligations: mergeArray(previousFinanceState.obligations, fs.obligations),
+          savings: mergeArray(previousFinanceState.savings, fs.savings),
+          history: mergeArray(previousFinanceState.history, fs.history)
+        });
       }
 
-      if (pendingImportData.categories && pendingImportData.categories.length > 0) {
+      // In replace mode categories were already prepared above; in merge mode
+      // append only genuinely new custom categories.
+      if (mode !== 'replace' && pendingImportData.categories && pendingImportData.categories.length > 0) {
         const mergedCats = [...categories];
         pendingImportData.categories.forEach(newCat => {
           if (!mergedCats.some(c => c.id === newCat.id)) mergedCats.push(newCat);
@@ -2244,6 +2247,17 @@ function bindEventListeners() {
       pendingImportData = null;
       setTimeout(() => el.importOverlay.classList.remove('open'), 900);
     } catch (err) {
+      // Roll back in-memory state and environment-scoped finance state if any
+      // part of the import fails after staging. The persisted note snapshot is
+      // restored as well, preventing a half-imported dataset.
+      try {
+        notes = previousNotesSnapshot || notes;
+        categories = previousCategoriesSnapshot || categories;
+        await StorageService.saveNotes(notes, categories);
+        StorageService.saveFinanceState(previousFinanceState || { obligations: [], savings: [], history: [] });
+      } catch (rollbackErr) {
+        console.error('Rollback impor gagal:', rollbackErr);
+      }
       el.importStatusMsg.textContent = 'Gagal memproses impor: ' + err.message;
       el.importStatusMsg.className = 'status-msg danger';
       UIService.showToast('Gagal memproses impor: ' + err.message, 'danger');
