@@ -12,6 +12,7 @@ import { ImageEditorService } from './imageEditor.js';
 import { SecurityService } from './security.js';
 import { APP_VERSION } from '../version.js';
 import { AttachmentService } from './attachment.js';
+import { FinancePdfReportService } from './financePdfReport.js';
 
 const OBL_KEY = 'cp_obligations_v2';
 const SAV_KEY = 'cp_savings_v2';
@@ -48,19 +49,40 @@ function addStyle() {
   style.textContent = `
     .cp104-nav{position:fixed;left:0;right:0;bottom:0;width:100%;transform:none;z-index:90;display:flex;gap:0;padding:5px 8px calc(5px + env(safe-area-inset-bottom));background:rgba(255,252,244,.98);border-top:1px solid var(--card-edge,#ddd);box-shadow:0 -6px 22px rgba(0,0,0,.12);backdrop-filter:blur(10px);border-radius:0}
     .cp104-nav button{border:0;background:transparent;padding:10px 8px;border-radius:9px;flex:1;min-width:0;font:600 12px inherit;color:var(--ink-soft,#667);cursor:pointer;text-align:center}.cp104-nav button.active{background:var(--ink,#27352b);color:#fff}
-    .cp104-panel{position:fixed;inset:0;z-index:80;background:var(--paper,#f8f4e9);overflow:auto;padding:18px 14px 140px;display:none}.cp104-panel.open{display:block}
-    .cp104-head{max-width:960px;margin:0 auto 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.cp104-title{font:700 22px 'Source Serif 4',Georgia,serif}.cp104-actions{display:flex;gap:6px;flex-wrap:wrap}.cp104-finance-head .cp104-actions{display:grid;grid-template-columns:repeat(2,minmax(86px,1fr));gap:5px;flex:0 0 auto}.cp104-finance-head .cp104-actions .cp104-btn{min-height:34px;padding:5px 8px;font-size:11px;line-height:1.15;white-space:nowrap}.cp104-finance-head .cp104-actions .cp104-tool-export{background:#f3ead2;border-color:#cdbb88;color:#4b3b1e}.cp104-actions .cp104-tool-income{background:#dfead9;border-color:#9eb894;color:#31462d}.cp104-actions .cp104-tool-expense{background:#f3ddd8;border-color:#d6a59b;color:#6b3027}.cp104-actions .cp104-tool-debt{background:#e5def1;border-color:#b6a4d0;color:#493761}.cp104-btn{border:1px solid var(--card-edge,#ddd);background:#fff;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}.cp104-btn.primary{background:var(--ink,#27352b);color:#fff;border-color:var(--ink,#27352b)}
-    .cp104-grid{max-width:960px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cp104-card{background:#fff;border:1px solid var(--card-edge,#ddd);border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.cp104-card h3{margin:0 0 6px;font:700 14px 'Source Serif 4',Georgia,serif}.cp104-val{font:700 18px 'IBM Plex Mono',monospace}.cp104-muted{font-size:11px;color:var(--ink-soft,#667)}
-    .cp104-wide{grid-column:1/-1}.cp104-scroll{overflow:auto;max-height:320px}.cp104-input{width:100%;box-sizing:border-box;border:1px solid var(--card-edge,#ddd);border-radius:7px;padding:9px;background:#fff}.cp104-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.cp104-row>*{flex:1;min-width:0}.cp104-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;border:1px solid #ddd;font-size:11px;background:#fff}.cp104-bar{height:9px;border-radius:8px;background:#eee9dc;overflow:hidden}.cp104-bar>i{display:block;height:100%;background:var(--moss,#47593f)}
-    .cp104-finance-sections{grid-template-columns:repeat(2,1fr);gap:8px}
-    .cp104-stat{display:flex;align-items:center;gap:8px;padding:10px;border-radius:12px;border:1px solid var(--card-edge,#ddd);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.04);cursor:pointer;user-select:none;transition:transform .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent}
+    .cp104-panel{position:fixed;inset:0;z-index:80;background:var(--paper,#f8f4e9);overflow-x:hidden;overflow-y:auto;padding:16px 12px 140px;display:none;box-sizing:border-box}.cp104-panel.open{display:block}
+    .cp104-head{max-width:960px;margin:0 auto 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;box-sizing:border-box}
+    .cp104-title{font:700 20px 'Source Serif 4',Georgia,serif}
+    .cp104-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .cp104-finance-head .cp104-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%;max-width:180px;flex:0 0 auto}
+    .cp104-finance-head .cp104-actions .cp104-btn{min-height:34px;padding:5px 6px;font-size:11px;line-height:1.15;white-space:nowrap;text-align:center}
+    .cp104-finance-head .cp104-actions .cp104-tool-export{background:#f3ead2;border-color:#cdbb88;color:#4b3b1e}
+    .cp104-actions .cp104-tool-income{background:#dfead9;border-color:#9eb894;color:#31462d}
+    .cp104-actions .cp104-tool-expense{background:#f3ddd8;border-color:#d6a59b;color:#6b3027}
+    .cp104-actions .cp104-tool-debt{background:#e5def1;border-color:#b6a4d0;color:#493761}
+    .cp104-btn{border:1px solid var(--card-edge,#ddd);background:#fff;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
+    .cp104-btn.primary{background:var(--ink,#27352b);color:#fff;border-color:var(--ink,#27352b)}
+    .cp104-grid{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:10px;width:100%;box-sizing:border-box}
+    .cp104-card{width:100%;box-sizing:border-box;background:#fff;border:1px solid var(--card-edge,#ddd);border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    .cp104-card h3{margin:0 0 6px;font:700 14px 'Source Serif 4',Georgia,serif}
+    .cp104-val{font:700 18px 'IBM Plex Mono',monospace}
+    .cp104-muted{font-size:11px;color:var(--ink-soft,#667)}
+    .cp104-wide{width:100%}
+    .cp104-scroll{overflow:auto;max-height:320px}
+    .cp104-input{width:100%;box-sizing:border-box;border:1px solid var(--card-edge,#ddd);border-radius:7px;padding:9px;background:#fff}
+    .cp104-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+    .cp104-row>*{flex:1;min-width:0}
+    .cp104-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;border:1px solid #ddd;font-size:11px;background:#fff}
+    .cp104-bar{height:9px;border-radius:8px;background:#eee9dc;overflow:hidden}
+    .cp104-bar>i{display:block;height:100%;background:var(--moss,#47593f)}
+    .cp104-finance-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;box-sizing:border-box}
+    .cp104-stat{display:flex;align-items:center;gap:6px;padding:9px 8px;border-radius:12px;border:1px solid var(--card-edge,#ddd);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.04);cursor:pointer;user-select:none;transition:transform .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent;min-width:0;box-sizing:border-box}
     .cp104-stat:active{transform:scale(.96);box-shadow:0 1px 3px rgba(0,0,0,.08)}
     .cp104-stat:focus-visible{outline:2px solid var(--ink,#27352b);outline-offset:2px}
-    .cp104-stat-ico{font-size:17px;width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#f3ead2}
-    .cp104-stat-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-    .cp104-stat-txt .cp104-val{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .cp104-stat-txt .cp104-muted{font-size:9.5px;text-transform:uppercase;letter-spacing:.02em}
-    .cp104-stat-go{font-size:16px;color:var(--ink-soft,#667);flex:0 0 auto;transition:transform .12s ease}
+    .cp104-stat-ico{font-size:16px;width:30px;height:30px;flex:0 0 30px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#f3ead2}
+    .cp104-stat-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;overflow:hidden}
+    .cp104-stat-txt .cp104-val{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cp104-stat-txt .cp104-muted{font-size:9px;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cp104-stat-go{font-size:14px;color:var(--ink-soft,#667);flex:0 0 auto;transition:transform .12s ease}
     .cp104-stat:active .cp104-stat-go{transform:translateX(2px)}
     .cp104-stat-net .cp104-stat-ico{background:#f3ead2}
     .cp104-stat-income .cp104-stat-ico{background:#dfead9;color:#31462d}
@@ -90,7 +112,7 @@ function addStyle() {
     .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-funding{border:1px dashed #d8d0bf;border-radius:8px;padding:9px;background:#faf7ee}.cp104-funding-search{margin-bottom:7px}.cp104-fund-row{display:grid;grid-template-columns:auto 1fr 120px;gap:7px;align-items:center;padding:5px 0}.cp104-fund-row input[type=number]{width:100%;box-sizing:border-box}.cp104-history{margin-top:8px;border-top:1px solid #eee8dc;padding-top:7px}.cp104-history-item{padding:7px 0;border-bottom:1px solid #eee8dc;font-size:11px}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
     .cp104-batch{position:fixed;left:10px;right:10px;bottom:74px;z-index:89;display:none;background:#fffdf7;border:1px solid #d8d0bf;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.cp104-batch.open{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.cp104-batch button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:700}
     .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none;display:block;margin:0 auto}.cp104-canvas-wrap canvas+canvas{position:absolute;left:8px;top:8px;margin:0}.cp104-inline-note{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;margin:2px 3px;border:1px solid var(--card-edge,#d8d0bb);border-radius:7px;background:#faf7ef;cursor:pointer;user-select:none}.cp104-inline-note:hover{border-color:var(--moss,#47593f);background:#f4f0e5}.cp104-inline-note small{color:var(--ink-soft,#667);font-size:9px}
-    @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(78px,1fr));width:174px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 6px}.cp104-finance-sections{grid-template-columns:repeat(2,1fr)}.cp104-stat{padding:8px;gap:6px}.cp104-stat-ico{width:28px;height:28px;flex-basis:28px;font-size:15px}.cp104-stat-txt .cp104-val{font-size:13px}.cp104-day{min-height:48px;padding:4px 3px}.cp104-wide{grid-column:auto}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:19px}}
+    @media(max-width:650px){.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(0,1fr));max-width:160px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 4px}.cp104-finance-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.cp104-stat{padding:7px 6px;gap:5px}.cp104-stat-ico{width:26px;height:26px;flex-basis:26px;font-size:14px;border-radius:7px}.cp104-stat-txt .cp104-val{font-size:12px}.cp104-stat-txt .cp104-muted{font-size:8.5px}.cp104-day{min-height:48px;padding:4px 3px}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:18px}}
   `;
   document.head.appendChild(style);
 }
@@ -137,15 +159,17 @@ export const FeaturePackService = {
           <div class="cp104-actions"><button type="button" class="cp104-btn cp104-tool-export" id="cp104ExportFinance">📤 Ekspor</button><button type="button" class="cp104-btn cp104-tool-income" id="cp104AddIncome">＋ Pemasukan</button><button type="button" class="cp104-btn cp104-tool-expense" id="cp104AddExpense">－ Pengeluaran</button><button type="button" class="cp104-btn cp104-tool-debt" id="cp104AddDebt">＋ Hutang</button></div>
         </div>
         <div class="cp104-grid cp104-finance-sections">
-          <div class="cp104-stat cp104-stat-net" id="cp104HistoryNet" role="button" tabindex="0" aria-label="Lihat Riwayat Saldo Bersih"><span class="cp104-stat-ico">💰</span><span class="cp104-stat-txt"><span class="cp104-muted">Saldo Bersih</span><span class="cp104-val" id="cp104Balance">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
-          <div class="cp104-stat cp104-stat-income" id="cp104HistoryIncome" role="button" tabindex="0" aria-label="Lihat Riwayat Pemasukan"><span class="cp104-stat-ico">⬆️</span><span class="cp104-stat-txt"><span class="cp104-muted">Pemasukan</span><span class="cp104-val" id="cp104Income">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
-          <div class="cp104-stat cp104-stat-expense" id="cp104HistoryExpense" role="button" tabindex="0" aria-label="Lihat Riwayat Pengeluaran"><span class="cp104-stat-ico">⬇️</span><span class="cp104-stat-txt"><span class="cp104-muted">Pengeluaran</span><span class="cp104-val" id="cp104Expense">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
-          <div class="cp104-stat cp104-stat-debt" id="cp104HistoryDebt" role="button" tabindex="0" aria-label="Lihat Riwayat Hutang"><span class="cp104-stat-ico">🧾</span><span class="cp104-stat-txt"><span class="cp104-muted">Hutang</span><span class="cp104-val" id="cp104Debt">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
-          <div class="cp104-stat cp104-stat-savings" id="cp104HistorySavings" role="button" tabindex="0" aria-label="Lihat Riwayat Tabungan"><span class="cp104-stat-ico">🐷</span><span class="cp104-stat-txt"><span class="cp104-muted">Tabungan</span><span class="cp104-val" id="cp104Savings">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
-          <div class="cp104-stat cp104-stat-obligation" id="cp104HistoryObligations" role="button" tabindex="0" aria-label="Lihat Riwayat Pengeluaran Wajib"><span class="cp104-stat-ico">📌</span><span class="cp104-stat-txt"><span class="cp104-muted">Pengeluaran Wajib</span><span class="cp104-val" id="cp104Obligation">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+          <div class="cp104-finance-stats-grid">
+            <div class="cp104-stat cp104-stat-net" id="cp104HistoryNet" role="button" tabindex="0" aria-label="Lihat Riwayat Saldo Bersih"><span class="cp104-stat-ico">💰</span><span class="cp104-stat-txt"><span class="cp104-muted">Saldo Bersih</span><span class="cp104-val" id="cp104Balance">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+            <div class="cp104-stat cp104-stat-income" id="cp104HistoryIncome" role="button" tabindex="0" aria-label="Lihat Riwayat Pemasukan"><span class="cp104-stat-ico">⬆️</span><span class="cp104-stat-txt"><span class="cp104-muted">Pemasukan</span><span class="cp104-val" id="cp104Income">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+            <div class="cp104-stat cp104-stat-expense" id="cp104HistoryExpense" role="button" tabindex="0" aria-label="Lihat Riwayat Pengeluaran"><span class="cp104-stat-ico">⬇️</span><span class="cp104-stat-txt"><span class="cp104-muted">Pengeluaran</span><span class="cp104-val" id="cp104Expense">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+            <div class="cp104-stat cp104-stat-debt" id="cp104HistoryDebt" role="button" tabindex="0" aria-label="Lihat Riwayat Hutang"><span class="cp104-stat-ico">🧾</span><span class="cp104-stat-txt"><span class="cp104-muted">Hutang</span><span class="cp104-val" id="cp104Debt">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+            <div class="cp104-stat cp104-stat-savings" id="cp104HistorySavings" role="button" tabindex="0" aria-label="Lihat Riwayat Tabungan"><span class="cp104-stat-ico">🐷</span><span class="cp104-stat-txt"><span class="cp104-muted">Tabungan</span><span class="cp104-val" id="cp104Savings">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+            <div class="cp104-stat cp104-stat-obligation" id="cp104HistoryObligations" role="button" tabindex="0" aria-label="Lihat Riwayat Pengeluaran Wajib"><span class="cp104-stat-ico">📌</span><span class="cp104-stat-txt"><span class="cp104-muted">Pengeluaran Wajib</span><span class="cp104-val" id="cp104Obligation">Rp 0</span></span><span class="cp104-stat-go">›</span></div>
+          </div>
           <div class="cp104-card cp104-wide"><div class="cp104-row"><input class="cp104-input" type="date" id="cp104FinFrom"><input class="cp104-input" type="date" id="cp104FinTo"><button type="button" class="cp104-btn" id="cp104ResetFin">Semua tanggal</button></div><div style="height:10px"></div><div id="cp104FinanceChart"></div></div>
-          <div class="cp104-card"><h3>Transaksi</h3><div class="cp104-scroll" id="cp104TxList"></div><div class="cp104-history"><button type="button" class="cp104-btn" id="cp104HistoryAll">Riwayat Semua Dana & Transaksi</button></div></div>
-          <div class="cp104-card"><h3>Hutang</h3><div class="cp104-scroll" id="cp104DebtList"></div></div>
+          <div class="cp104-card cp104-wide"><h3>Transaksi</h3><div class="cp104-scroll" id="cp104TxList"></div><div class="cp104-history"><button type="button" class="cp104-btn" id="cp104HistoryAll">Riwayat Semua Dana & Transaksi</button></div></div>
+          <div class="cp104-card cp104-wide"><h3>Hutang</h3><div class="cp104-scroll" id="cp104DebtList"></div></div>
           <div class="cp104-card cp104-wide"><div class="cp104-row"><h3 style="margin-right:auto">Dana Pengeluaran Wajib</h3><button type="button" class="cp104-btn" id="cp104AddOb">+ Tambah</button></div><div class="cp104-row"><input class="cp104-input" id="cp104ObName" placeholder="Nama kewajiban"><input class="cp104-input" id="cp104ObAmount" type="number" min="0" placeholder="Nominal"><input class="cp104-input" id="cp104ObDue" type="date"></div><div class="cp104-help">Sumber dana dipilih saat kewajiban dibayar. Bisa Dana Bersih, satu/lebih tabungan, atau Lainnya.</div><div class="cp104-scroll" id="cp104ObList"></div></div>
           <div class="cp104-card cp104-wide"><div class="cp104-row"><h3 style="margin-right:auto">Pos Tabungan</h3><button type="button" class="cp104-btn" id="cp104AddSav">+ Pos Baru</button><button type="button" class="cp104-btn" id="cp104DepositSav">Setor / Tarik</button></div><div class="cp104-scroll" id="cp104SavList"></div></div>
         </div>`;
@@ -712,13 +736,531 @@ export const FeaturePackService = {
   },
 
   async exportFinance() {
+    this.openExportFinanceModal();
+  },
+
+  openExportFinanceModal() {
+    let modal = document.getElementById('cp104ExportModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'cp104ExportModal';
+      modal.className = 'cp104-modal';
+      modal.innerHTML = `
+        <div class="cp104-dialog" style="max-width:580px">
+          <div class="cp104-head">
+            <div class="cp104-title">📄 Ekspor Laporan Keuangan (PDF)</div>
+            <button type="button" class="cp104-btn" id="cp104ExportClose">✕</button>
+          </div>
+          <form class="cp104-form" id="cp104ExportForm" style="margin-top:10px">
+            <div style="background:#f4f7f2;border:1px solid #d8e2d4;border-radius:8px;padding:9px 12px;font-size:12px;color:#284228;display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">📑</span>
+              <div><b>Pilih Data yang Ingin Diekspor:</b> Anda dapat memilih mengekspor hanya transaksi pengeluaran, hanya pemasukan, hutang, atau laporan lengkap secara rapi dan tertata.</div>
+            </div>
+
+            <!-- 1. Pilihan Apa yang Ingin Diekspor -->
+            <div style="font-weight:700;font-size:12.5px;color:var(--ink,#27352b);margin-top:10px">
+              1. Pilih Fokus / Jenis Data yang Diekspor
+            </div>
+            <div id="cp104ScopeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px">
+              <button type="button" class="cp104-btn cp-scope-btn active" data-scope="expense_only" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">💸</span>
+                <span style="font-size:11.5px;font-weight:600">Hanya Pengeluaran</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="income_only" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">💰</span>
+                <span style="font-size:11.5px;font-weight:600">Hanya Pemasukan</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="debt_only" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">🧾</span>
+                <span style="font-size:11.5px;font-weight:600">Hanya Hutang</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="all_transactions" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">⚖️</span>
+                <span style="font-size:11.5px;font-weight:600">Semua Transaksi</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="obligation_only" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">📌</span>
+                <span style="font-size:11.5px;font-weight:600">Pos Dana Wajib</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="savings_only" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">🏦</span>
+                <span style="font-size:11.5px;font-weight:600">Pos Tabungan</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="full_recap" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">📊</span>
+                <span style="font-size:11.5px;font-weight:600">Laporan Lengkap</span>
+              </button>
+              <button type="button" class="cp104-btn cp-scope-btn" data-scope="custom" style="display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:8px;gap:2px">
+                <span style="font-size:18px">⚙️</span>
+                <span style="font-size:11.5px;font-weight:600">Kustom Sendiri</span>
+              </button>
+            </div>
+
+            <!-- 2. Rentang Tanggal -->
+            <div style="font-weight:700;font-size:12.5px;color:var(--ink,#27352b);margin-top:10px">
+              2. Pilih Rentang Tanggal
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+              <button type="button" class="cp104-btn" id="cp104ExpPresetAll" style="font-size:11px;padding:3px 8px">Semua Waktu</button>
+              <button type="button" class="cp104-btn" id="cp104ExpPresetToday" style="font-size:11px;padding:3px 8px">Hari Ini</button>
+              <button type="button" class="cp104-btn" id="cp104ExpPreset7Days" style="font-size:11px;padding:3px 8px">7 Hari Terakhir</button>
+              <button type="button" class="cp104-btn" id="cp104ExpPresetThisMonth" style="font-size:11px;padding:3px 8px">Bulan Ini</button>
+              <button type="button" class="cp104-btn" id="cp104ExpPresetLastMonth" style="font-size:11px;padding:3px 8px">Bulan Lalu</button>
+              <button type="button" class="cp104-btn" id="cp104ExpPresetYear" style="font-size:11px;padding:3px 8px">Tahun Ini</button>
+            </div>
+            <div class="cp104-row">
+              <label>Dari Tanggal
+                <input class="cp104-input" id="cp104ExpFrom" type="date">
+              </label>
+              <label>Sampai Tanggal
+                <input class="cp104-input" id="cp104ExpTo" type="date">
+              </label>
+            </div>
+
+            <!-- 3. Rincian Komponen Dokumen PDF -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+              <div style="font-weight:700;font-size:12.5px;color:var(--ink,#27352b)">
+                3. Rincian Komponen Laporan
+              </div>
+              <span id="cp104SecScopeBadge" style="font-size:11px;color:#284228;background:#e9f0e6;padding:2px 7px;border-radius:4px;font-weight:600">Mode: Hanya Pengeluaran</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;background:#fff;border:1px solid #e2ded4;border-radius:8px;padding:10px">
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecSummary" checked> Kotak Ringkasan & Total
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecTxExpense" checked> Rincian Transaksi Pengeluaran
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecTxIncome"> Rincian Transaksi Pemasukan
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecDebt"> Daftar Hutang & Pelunasan
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecObligation"> Pos Pengeluaran Wajib
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecSavings"> Pos Tabungan & Aset
+              </label>
+              <label class="cp104-check" style="font-size:12px">
+                <input type="checkbox" id="cp104SecHistory"> Riwayat Audit / Log Mutasi
+              </label>
+            </div>
+
+            <!-- Live Preview Data -->
+            <div id="cp104ExpLivePreview" style="background:#faf8f5;border:1px solid #e5dfd3;border-radius:8px;padding:9px 12px;font-size:12px;color:#27352b;margin-top:8px">
+              Sedang menghitung pratinjau data…
+            </div>
+
+            <div class="cp104-actions" style="justify-content:flex-end;margin-top:14px;border-top:1px solid #eee8dc;padding-top:10px;gap:8px">
+              <button type="button" class="cp104-btn" id="cp104ExpCancel">Batal</button>
+              <button type="button" class="cp104-btn" id="cp104ExpJsonBackup" title="Ekspor file JSON teknis untuk backup restore">💾 Unduh JSON</button>
+              <button type="submit" class="cp104-btn primary" id="cp104ExpSubmitPdf" style="font-weight:600">📥 Unduh Laporan PDF</button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      // Event listeners dialog ekspor
+      modal.querySelector('#cp104ExportClose').onclick = () => modal.classList.remove('open');
+      modal.querySelector('#cp104ExpCancel').onclick = () => modal.classList.remove('open');
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+
+      // Scope Selection State
+      let currentScope = 'expense_only';
+
+      const updateScopeButtonsUI = (scope) => {
+        currentScope = scope;
+        modal.querySelectorAll('.cp-scope-btn').forEach((btn) => {
+          btn.classList.toggle('primary', btn.dataset.scope === scope);
+          if (btn.dataset.scope === scope) {
+            btn.style.borderColor = '#27352b';
+            btn.style.background = '#27352b';
+            btn.style.color = '#fff';
+          } else {
+            btn.style.borderColor = '';
+            btn.style.background = '';
+            btn.style.color = '';
+          }
+        });
+
+        const badge = modal.querySelector('#cp104SecScopeBadge');
+        if (badge) {
+          const names = {
+            expense_only: 'Hanya Pengeluaran',
+            income_only: 'Hanya Pemasukan',
+            debt_only: 'Hanya Hutang',
+            all_transactions: 'Semua Transaksi',
+            obligation_only: 'Pengeluaran Wajib',
+            savings_only: 'Pos Tabungan',
+            full_recap: 'Laporan Lengkap',
+            custom: 'Kustom Pilihan Sendiri'
+          };
+          badge.textContent = `Mode: ${names[scope] || scope}`;
+        }
+      };
+
+      const applyScopeCheckboxes = (scope) => {
+        const cSummary = modal.querySelector('#cp104SecSummary');
+        const cExp = modal.querySelector('#cp104SecTxExpense');
+        const cInc = modal.querySelector('#cp104SecTxIncome');
+        const cDebt = modal.querySelector('#cp104SecDebt');
+        const cObl = modal.querySelector('#cp104SecObligation');
+        const cSav = modal.querySelector('#cp104SecSavings');
+        const cHist = modal.querySelector('#cp104SecHistory');
+
+        if (scope === 'expense_only') {
+          cSummary.checked = true;
+          cExp.checked = true;
+          cInc.checked = false;
+          cDebt.checked = false;
+          cObl.checked = false;
+          cSav.checked = false;
+          cHist.checked = false;
+        } else if (scope === 'income_only') {
+          cSummary.checked = true;
+          cExp.checked = false;
+          cInc.checked = true;
+          cDebt.checked = false;
+          cObl.checked = false;
+          cSav.checked = false;
+          cHist.checked = false;
+        } else if (scope === 'debt_only') {
+          cSummary.checked = true;
+          cExp.checked = false;
+          cInc.checked = false;
+          cDebt.checked = true;
+          cObl.checked = false;
+          cSav.checked = false;
+          cHist.checked = false;
+        } else if (scope === 'obligation_only') {
+          cSummary.checked = true;
+          cExp.checked = false;
+          cInc.checked = false;
+          cDebt.checked = false;
+          cObl.checked = true;
+          cSav.checked = false;
+          cHist.checked = false;
+        } else if (scope === 'savings_only') {
+          cSummary.checked = true;
+          cExp.checked = false;
+          cInc.checked = false;
+          cDebt.checked = false;
+          cObl.checked = false;
+          cSav.checked = true;
+          cHist.checked = false;
+        } else if (scope === 'all_transactions') {
+          cSummary.checked = true;
+          cExp.checked = true;
+          cInc.checked = true;
+          cDebt.checked = true;
+          cObl.checked = false;
+          cSav.checked = false;
+          cHist.checked = false;
+        } else if (scope === 'full_recap') {
+          cSummary.checked = true;
+          cExp.checked = true;
+          cInc.checked = true;
+          cDebt.checked = true;
+          cObl.checked = true;
+          cSav.checked = true;
+          cHist.checked = false;
+        }
+        updateScopeButtonsUI(scope);
+        updateLivePreview();
+      };
+
+      modal.querySelectorAll('.cp-scope-btn').forEach((btn) => {
+        btn.onclick = () => {
+          applyScopeCheckboxes(btn.dataset.scope);
+        };
+      });
+
+      // Jika pengguna mengubah checkbox secara manual, ubah mode jadi custom
+      [
+        '#cp104SecSummary', '#cp104SecTxExpense', '#cp104SecTxIncome',
+        '#cp104SecDebt', '#cp104SecObligation', '#cp104SecSavings', '#cp104SecHistory'
+      ].forEach((sel) => {
+        modal.querySelector(sel).onchange = () => {
+          updateScopeButtonsUI('custom');
+          updateLivePreview();
+        };
+      });
+
+      // Presets Rentang Tanggal
+      modal.querySelector('#cp104ExpPresetAll').onclick = () => {
+        modal.querySelector('#cp104ExpFrom').value = '';
+        modal.querySelector('#cp104ExpTo').value = '';
+        updateLivePreview();
+      };
+      modal.querySelector('#cp104ExpPresetToday').onclick = () => {
+        const t = today();
+        modal.querySelector('#cp104ExpFrom').value = t;
+        modal.querySelector('#cp104ExpTo').value = t;
+        updateLivePreview();
+      };
+      modal.querySelector('#cp104ExpPreset7Days').onclick = () => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        modal.querySelector('#cp104ExpFrom').value = d.toISOString().slice(0, 10);
+        modal.querySelector('#cp104ExpTo').value = today();
+        updateLivePreview();
+      };
+      modal.querySelector('#cp104ExpPresetThisMonth').onclick = () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+        modal.querySelector('#cp104ExpFrom').value = start;
+        modal.querySelector('#cp104ExpTo').value = end;
+        updateLivePreview();
+      };
+      modal.querySelector('#cp104ExpPresetLastMonth').onclick = () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+        modal.querySelector('#cp104ExpFrom').value = start;
+        modal.querySelector('#cp104ExpTo').value = end;
+        updateLivePreview();
+      };
+      modal.querySelector('#cp104ExpPresetYear').onclick = () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
+        const end = new Date(now.getFullYear(), 11, 31).toISOString().slice(0, 10);
+        modal.querySelector('#cp104ExpFrom').value = start;
+        modal.querySelector('#cp104ExpTo').value = end;
+        updateLivePreview();
+      };
+
+      modal.querySelector('#cp104ExpFrom').onchange = updateLivePreview;
+      modal.querySelector('#cp104ExpTo').onchange = updateLivePreview;
+
+      function updateLivePreview() {
+        const fromDate = modal.querySelector('#cp104ExpFrom').value;
+        const toDate = modal.querySelector('#cp104ExpTo').value;
+        const cExp = modal.querySelector('#cp104SecTxExpense').checked;
+        const cInc = modal.querySelector('#cp104SecTxIncome').checked;
+        const cDebt = modal.querySelector('#cp104SecDebt').checked;
+        const cObl = modal.querySelector('#cp104SecObligation').checked;
+        const cSav = modal.querySelector('#cp104SecSavings').checked;
+
+        const allBase = FeaturePackService.getTxBase();
+        const expList = allBase.filter((n) => n.type === 'expense' && (!fromDate || n.date >= fromDate) && (!toDate || n.date <= toDate));
+        const incList = allBase.filter((n) => n.type === 'income' && (!fromDate || n.date >= fromDate) && (!toDate || n.date <= toDate));
+        const debtList = allBase.filter((n) => n.type === 'debt' && (!fromDate || n.date >= fromDate) && (!toDate || n.date <= toDate));
+
+        const totalExp = expList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+        const totalInc = incList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+        const totalDebt = debtList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+
+        const periodLabel = (fromDate || toDate) ? `Periode: <b>${fromDate || 'Awal'}</b> s/d <b>${toDate || 'Sekarang'}</b>` : 'Periode: <b>Semua Waktu</b>';
+
+        let infoText = '';
+        if (cExp && !cInc && !cDebt && !cObl && !cSav) {
+          infoText = `🔍 <b>Pratinjau Data:</b> Akan mengekspor <b>${expList.length} transaksi pengeluaran</b> dengan total <b>${rupiah(totalExp)}</b> (${periodLabel}).`;
+        } else if (cInc && !cExp && !cDebt && !cObl && !cSav) {
+          infoText = `🔍 <b>Pratinjau Data:</b> Akan mengekspor <b>${incList.length} transaksi pemasukan</b> dengan total <b>${rupiah(totalInc)}</b> (${periodLabel}).`;
+        } else if (cDebt && !cExp && !cInc && !cObl && !cSav) {
+          infoText = `🔍 <b>Pratinjau Data:</b> Akan mengekspor <b>${debtList.length} catatan hutang</b> dengan total pokok <b>${rupiah(totalDebt)}</b> (${periodLabel}).`;
+        } else if (cExp && cInc && !cObl && !cSav) {
+          infoText = `🔍 <b>Pratinjau Data:</b> ${expList.length} Pengeluaran (${rupiah(totalExp)}) & ${incList.length} Pemasukan (${rupiah(totalInc)}) (${periodLabel}).`;
+        } else {
+          infoText = `🔍 <b>Pratinjau Data:</b> Laporan gabungan terpilih: ${cExp ? `${expList.length} Pengeluaran, ` : ''}${cInc ? `${incList.length} Pemasukan, ` : ''}${cDebt ? `${debtList.length} Hutang, ` : ''}${cObl ? `${FeaturePackService.obligations.length} Pos Wajib, ` : ''}${cSav ? `${FeaturePackService.savings.length} Tabungan` : ''} (${periodLabel}).`;
+        }
+
+        const previewEl = modal.querySelector('#cp104ExpLivePreview');
+        if (previewEl) previewEl.innerHTML = infoText;
+      }
+
+      // Default awal
+      updateScopeButtonsUI('expense_only');
+      applyScopeCheckboxes('expense_only');
+
+      // Backup JSON opsional
+      modal.querySelector('#cp104ExpJsonBackup').onclick = async () => {
+        try {
+          const payload = {
+            app: 'Catatan Pintar',
+            backupFormat: 'finance-v2',
+            version: APP_VERSION,
+            exportedAt: new Date().toISOString(),
+            transactions: this.getTx().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })),
+            obligations: this.obligations,
+            savings: this.savings,
+            history: loadHistory()
+          };
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+          await AttachmentService.saveOrDownloadBlob(blob, `catatan-pintar-keuangan-${today()}.json`, 'application/json');
+          this.ctx.toast('Data JSON keuangan berhasil diunduh.', 'info');
+          modal.classList.remove('open');
+        } catch (err) {
+          this.ctx.toast(`Gagal ekspor JSON: ${err.message || err}`, 'danger');
+        }
+      };
+
+      // Submit Form PDF
+      modal.querySelector('#cp104ExportForm').onsubmit = async (e) => {
+        e.preventDefault();
+        await this.processPdfExport();
+      };
+    }
+
+    // Sinkronisasi input tanggal awal berdasarkan filter aktif di layar
+    const currentFrom = document.getElementById('cp104FinFrom')?.value || '';
+    const currentTo = document.getElementById('cp104FinTo')?.value || '';
+    modal.querySelector('#cp104ExpFrom').value = currentFrom;
+    modal.querySelector('#cp104ExpTo').value = currentTo;
+
+    // Reset ke scope default atau pertahankan state
+    const activeBtn = modal.querySelector('.cp-scope-btn.active') || modal.querySelector('.cp-scope-btn[data-scope="expense_only"]');
+    if (activeBtn) activeBtn.click();
+
+    modal.classList.add('open');
+  },
+
+  async processPdfExport() {
+    const modal = document.getElementById('cp104ExportModal');
+    if (!modal) return;
+    const submitBtn = modal.querySelector('#cp104ExpSubmitPdf');
+    const fromDate = modal.querySelector('#cp104ExpFrom')?.value || '';
+    const toDate = modal.querySelector('#cp104ExpTo')?.value || '';
+
+    const sections = {
+      summary: modal.querySelector('#cp104SecSummary')?.checked || false,
+      txExpense: modal.querySelector('#cp104SecTxExpense')?.checked || false,
+      txIncome: modal.querySelector('#cp104SecTxIncome')?.checked || false,
+      debts: modal.querySelector('#cp104SecDebt')?.checked || false,
+      obligations: modal.querySelector('#cp104SecObligation')?.checked || false,
+      savings: modal.querySelector('#cp104SecSavings')?.checked || false,
+      history: modal.querySelector('#cp104SecHistory')?.checked || false
+    };
+
+    if (!Object.values(sections).some(Boolean)) {
+      this.ctx.toast('Pilih setidaknya satu bagian laporan untuk diekspor.', 'danger');
+      return;
+    }
+
     try {
-      const payload = { app: 'Catatan Pintar', backupFormat: 'finance-v2', version: APP_VERSION, exportedAt: new Date().toISOString(), transactions: this.getTx().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })), obligations: this.obligations, savings: this.savings, history: loadHistory() };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      await AttachmentService.saveOrDownloadBlob(blob, `catatan-pintar-keuangan-${APP_VERSION}.json`, 'application/json');
-      this.ctx.toast('Data keuangan berhasil diekspor.', 'info');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Merender PDF…';
+      this.ctx.toast('Sedang menata dan merender laporan PDF resmi…', 'info');
+
+      // Filter daftar transaksi sesuai rentang tanggal
+      const allTx = this.getTxBase().filter((n) => {
+        if (fromDate && n.date < fromDate) return false;
+        if (toDate && n.date > toDate) return false;
+        return true;
+      }).sort((a, b) => String(a.date).localeCompare(String(b.date)) || (a.createdAt || 0) - (b.createdAt || 0));
+
+      const expenseList = allTx.filter((x) => x.type === 'expense');
+      const incomeList = allTx.filter((x) => x.type === 'income');
+      const debtList = allTx.filter((x) => x.type === 'debt');
+
+      // Perhitungan Statistik Khusus
+      const expenseTotal = expenseList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+      const expenseCount = expenseList.length;
+      const expenseAvg = expenseCount > 0 ? Math.round(expenseTotal / expenseCount) : 0;
+      let expenseMax = 0;
+      let expenseMaxTitle = '';
+      expenseList.forEach((x) => {
+        if (x.amount > expenseMax) {
+          expenseMax = x.amount;
+          expenseMaxTitle = x.title || 'Pengeluaran';
+        }
+      });
+
+      const incomeTotal = incomeList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+      const incomeCount = incomeList.length;
+      const incomeAvg = incomeCount > 0 ? Math.round(incomeTotal / incomeCount) : 0;
+      let incomeMax = 0;
+      let incomeMaxTitle = '';
+      incomeList.forEach((x) => {
+        if (x.amount > incomeMax) {
+          incomeMax = x.amount;
+          incomeMaxTitle = x.title || 'Pemasukan';
+        }
+      });
+
+      const debtTotal = debtList.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+      const debtPaid = debtList.reduce((sum, x) => sum + (x.paidAmount || 0), 0);
+      const debtRemain = Math.max(0, debtTotal - debtPaid);
+      const debtCount = debtList.length;
+      const debtPaidRatio = debtTotal > 0 ? Math.min(100, Math.round((debtPaid / debtTotal) * 100)) : 0;
+
+      const obligationTotal = this.obligations.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+      const obligationPaid = this.obligations.reduce((sum, x) => sum + (x.paidAmount || (x.isPaid ? x.amount : 0)), 0);
+      const obligationRemain = Math.max(0, obligationTotal - obligationPaid);
+
+      const savingsTotal = this.savings.reduce((sum, x) => sum + Number(x.balance || 0), 0);
+
+      const netBalance = incomeTotal - expenseTotal;
+
+      const summaryData = {
+        expenseTotal,
+        expenseCount,
+        expenseAvg,
+        expenseMax,
+        expenseMaxTitle,
+        incomeTotal,
+        incomeCount,
+        incomeAvg,
+        incomeMax,
+        incomeMaxTitle,
+        debtTotal,
+        debtPaid,
+        debtRemain,
+        debtCount,
+        debtPaidRatio,
+        obligationTotal,
+        obligationPaid,
+        obligationRemain,
+        savingsTotal,
+        netBalance
+      };
+
+      // Filter history log jika disertakan
+      const allHistory = loadHistory().filter((h) => {
+        if (!h.at) return false;
+        const hDate = new Date(h.at).toISOString().slice(0, 10);
+        if (fromDate && hDate < fromDate) return false;
+        if (toDate && hDate > toDate) return false;
+        return true;
+      }).sort((a, b) => b.at - a.at);
+
+      // Generate PDF Blob
+      const pdfBlob = await FinancePdfReportService.generateReport({
+        fromDate,
+        toDate,
+        sections,
+        expenseList,
+        incomeList,
+        debtList,
+        obligationList: this.obligations,
+        savingsList: this.savings,
+        historyList: allHistory,
+        summaryData
+      });
+
+      const safeDateTag = fromDate && toDate ? `${fromDate}_sd_${toDate}` : (fromDate || toDate || today());
+      let filePrefix = 'Laporan_Keuangan';
+      if (sections.txExpense && !sections.txIncome && !sections.debts && !sections.obligations && !sections.savings) {
+        filePrefix = 'Laporan_Pengeluaran';
+      } else if (sections.txIncome && !sections.txExpense && !sections.debts && !sections.obligations && !sections.savings) {
+        filePrefix = 'Laporan_Pemasukan';
+      } else if (sections.debts && !sections.txExpense && !sections.txIncome && !sections.obligations && !sections.savings) {
+        filePrefix = 'Laporan_Hutang';
+      }
+      const fileName = `${filePrefix}_CatatanPintar_${safeDateTag}.pdf`;
+
+      await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
+      this.ctx.toast('Laporan PDF berhasil dibuat dan diunduh.', 'info');
+      modal.classList.remove('open');
     } catch (err) {
-      this.ctx.toast(`Gagal ekspor keuangan: ${err.message || err}`, 'danger');
+      this.ctx.toast(`Gagal membuat PDF: ${err.message || err}`, 'danger');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '📥 Unduh Laporan PDF';
     }
   },
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'catatan-pintar-v1';
+const CACHE_NAME = 'catatan-pintar-v1.0.18-finance-pdf-scope';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -62,6 +62,24 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         }).catch(() => cachedResponse);
       })
+    );
+    return;
+  }
+
+  // For JS modules and source scripts, prefer Network-First with cache fallback so layout updates apply immediately
+  if (url.pathname.endsWith('.js') || url.pathname.includes('/src/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }

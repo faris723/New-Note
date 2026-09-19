@@ -1975,7 +1975,7 @@ function bindEventListeners() {
   el.closeFinanceTopBtn.onclick = () => el.financeOverlay.classList.remove('open');
   el.financeFrom.onchange = updateFinanceView;
   el.financeTo.onchange = updateFinanceView;
-  el.exportFinanceBtn.onclick = () => window.print();
+  el.exportFinanceBtn.onclick = () => FeaturePackService.exportFinance();
 
   // Export Modal
   el.exportMainBtn.onclick = () => {

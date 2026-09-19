@@ -155,10 +155,23 @@ export const PWAService = {
         navigator.serviceWorker.register('./sw.js', { scope: './' })
           .then((reg) => {
             console.log('Catatan Pintar Service Worker active. Scope:', reg.scope);
+            // Trigger check for updated SW immediately
+            if (reg.update) {
+              reg.update().catch(() => {});
+            }
           })
           .catch((err) => {
             console.warn('Service Worker registration notice:', err);
           });
+      });
+
+      // Reload page once when a new service worker takes control (cache updated)
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
   }
