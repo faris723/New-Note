@@ -68,11 +68,29 @@ function addStyle() {
     .cp104-stat-debt .cp104-stat-ico{background:#e5def1;color:#493761}
     .cp104-stat-savings .cp104-stat-ico{background:#dcebf0;color:#274752}
     .cp104-stat-obligation .cp104-stat-ico{background:#f3ead2;color:#4b3b1e}
-    .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}.cp104-day{min-height:62px;border:1px solid #e7e1d3;background:#fff;border-radius:6px;padding:5px;font-size:11px;cursor:pointer}.cp104-day.muted{opacity:.42}.cp104-day.sel{outline:2px solid var(--ink,#27352b)}.cp104-day b{display:block;margin-bottom:4px}.cp104-dot{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px;margin-top:2px;padding:1px 3px;border-radius:4px;background:#f3ead2}
+    .cp104-cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 8px;font-size:10px;color:var(--ink-soft,#667)}
+    .cp104-cal-legend span{display:inline-flex;align-items:center;gap:4px}
+    .cp104-legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 auto}
+    .cp104-legend-dot.today{background:#f2f6ef;border:2px solid var(--moss,#47593f);width:6px;height:6px}
+    .cp104-legend-dot.sel{background:transparent;border:2px solid var(--ink,#27352b);width:6px;height:6px}
+    .cp104-legend-dot.ev{background:var(--moss,#47593f)}
+    .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .cp104-cal-head{text-align:center;font-weight:700;padding:4px 0 6px;font-size:11px;color:var(--ink-soft,#667)}
+    .cp104-cal-head.weekend{color:#a3402f}
+    .cp104-day{position:relative;min-height:58px;border:1px solid #e7e1d3;background:#fff;border-radius:8px;padding:5px 4px;font-size:11px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:transform .1s ease,box-shadow .1s ease;user-select:none;-webkit-tap-highlight-color:transparent}
+    .cp104-day:active{transform:scale(.92)}
+    .cp104-day.muted{visibility:hidden;pointer-events:none}
+    .cp104-day.today{border-color:var(--moss,#47593f);background:#f2f6ef}
+    .cp104-day.today b{color:var(--moss,#47593f)}
+    .cp104-day.sel{outline:2px solid var(--ink,#27352b);outline-offset:-1px;box-shadow:0 3px 10px rgba(0,0,0,.14)}
+    .cp104-day b{font-weight:700;font-size:12px}
+    .cp104-day-dots{display:flex;gap:2px;flex-wrap:wrap;align-items:center;margin-top:auto}
+    .cp104-day-dot{width:6px;height:6px;border-radius:50%;background:var(--moss,#47593f);flex:0 0 auto}
+    .cp104-day-more{font-size:8.5px;color:var(--ink-soft,#667);font-weight:700;line-height:1}
     .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-funding{border:1px dashed #d8d0bf;border-radius:8px;padding:9px;background:#faf7ee}.cp104-funding-search{margin-bottom:7px}.cp104-fund-row{display:grid;grid-template-columns:auto 1fr 120px;gap:7px;align-items:center;padding:5px 0}.cp104-fund-row input[type=number]{width:100%;box-sizing:border-box}.cp104-history{margin-top:8px;border-top:1px solid #eee8dc;padding-top:7px}.cp104-history-item{padding:7px 0;border-bottom:1px solid #eee8dc;font-size:11px}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
     .cp104-batch{position:fixed;left:10px;right:10px;bottom:74px;z-index:89;display:none;background:#fffdf7;border:1px solid #d8d0bf;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.cp104-batch.open{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.cp104-batch button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:700}
     .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none;display:block;margin:0 auto}.cp104-canvas-wrap canvas+canvas{position:absolute;left:8px;top:8px;margin:0}.cp104-inline-note{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;margin:2px 3px;border:1px solid var(--card-edge,#d8d0bb);border-radius:7px;background:#faf7ef;cursor:pointer;user-select:none}.cp104-inline-note:hover{border-color:var(--moss,#47593f);background:#f4f0e5}.cp104-inline-note small{color:var(--ink-soft,#667);font-size:9px}
-    @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(78px,1fr));width:174px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 6px}.cp104-finance-sections{grid-template-columns:repeat(2,1fr)}.cp104-stat{padding:8px;gap:6px}.cp104-stat-ico{width:28px;height:28px;flex-basis:28px;font-size:15px}.cp104-stat-txt .cp104-val{font-size:13px}.cp104-wide{grid-column:auto}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:19px}}
+    @media(max-width:650px){.cp104-grid{grid-template-columns:1fr}.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(78px,1fr));width:174px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 6px}.cp104-finance-sections{grid-template-columns:repeat(2,1fr)}.cp104-stat{padding:8px;gap:6px}.cp104-stat-ico{width:28px;height:28px;flex-basis:28px;font-size:15px}.cp104-stat-txt .cp104-val{font-size:13px}.cp104-day{min-height:48px;padding:4px 3px}.cp104-wide{grid-column:auto}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:19px}}
   `;
   document.head.appendChild(style);
 }
@@ -140,7 +158,7 @@ export const FeaturePackService = {
       sch.className = 'cp104-panel';
       sch.innerHTML = `
         <div class="cp104-head"><div><div class="cp104-title">📅 Jadwal & Acara</div><div class="cp104-muted">Tambah acara langsung ke catatan kategori Acara.</div></div><div class="cp104-actions"><button type="button" class="cp104-btn" id="cp104Prev">‹ Bulan</button><button type="button" class="cp104-btn" id="cp104Today">Hari ini</button><button type="button" class="cp104-btn" id="cp104Next">Bulan ›</button><button type="button" class="cp104-btn primary" id="cp104AddEvent">+ Acara</button></div></div>
-        <div class="cp104-card" style="max-width:960px;margin:auto"><div class="cp104-head" style="margin:0 0 8px"><b id="cp104Month"></b><span class="cp104-muted" id="cp104SelCount"></span></div><div class="cp104-cal" id="cp104Calendar"></div><div style="height:12px"></div><h3>Acara pada tanggal terpilih</h3><div class="cp104-scroll" id="cp104DayEvents"></div></div>`;
+        <div class="cp104-card" style="max-width:960px;margin:auto"><div class="cp104-head" style="margin:0 0 4px"><b id="cp104Month"></b><span class="cp104-muted" id="cp104SelCount"></span></div><div class="cp104-cal-legend"><span><i class="cp104-legend-dot today"></i>Hari ini</span><span><i class="cp104-legend-dot sel"></i>Terpilih</span><span><i class="cp104-legend-dot ev"></i>Ada acara</span></div><div class="cp104-cal" id="cp104Calendar"></div><div style="height:12px"></div><h3>Acara pada tanggal terpilih</h3><div class="cp104-scroll" id="cp104DayEvents"></div></div>`;
       document.body.appendChild(sch);
     }
 
@@ -639,13 +657,20 @@ export const FeaturePackService = {
     if (!month || !cal) return;
     const year = this.calDate.getFullYear(); const monthIndex = this.calDate.getMonth(); const first = new Date(year, monthIndex, 1).getDay(); const days = new Date(year, monthIndex + 1, 0).getDate();
     month.textContent = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(this.calDate);
-    cal.innerHTML = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((x) => `<div class="cp104-muted" style="text-align:center;font-weight:700;padding:4px">${x}</div>`).join('');
+    cal.innerHTML = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((x, i) => `<div class="cp104-cal-head${i === 0 || i === 6 ? ' weekend' : ''}">${x}</div>`).join('');
     for (let i = 0; i < first; i++) cal.insertAdjacentHTML('beforeend', '<div class="cp104-day muted"></div>');
     const notes = this.ctx.getNotes() || [];
+    const todayStr = today();
     for (let day = 1; day <= days; day++) {
       const date = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const events = notes.filter((note) => note.category === 'acara' && this.eventDate(note) === date);
-      const cell = document.createElement('div'); cell.className = `cp104-day${date === this.selectedDate ? ' sel' : ''}`; cell.innerHTML = `<b>${day}</b>${events.slice(0, 3).map((note) => `<span class="cp104-dot">🎉 ${esc(note.title)}</span>`).join('')}`; cell.onclick = () => { this.selectedDate = date; this.renderCalendar(); }; cal.appendChild(cell);
+      const cell = document.createElement('div');
+      cell.className = `cp104-day${date === todayStr ? ' today' : ''}${date === this.selectedDate ? ' sel' : ''}`;
+      const dots = events.slice(0, 4).map((note) => `<span class="cp104-day-dot" title="${esc(note.title)}"></span>`).join('');
+      const more = events.length > 4 ? `<span class="cp104-day-more">+${events.length - 4}</span>` : '';
+      cell.innerHTML = `<b>${day}</b>${events.length ? `<div class="cp104-day-dots">${dots}${more}</div>` : ''}`;
+      cell.onclick = () => { this.selectedDate = date; this.renderCalendar(); };
+      cal.appendChild(cell);
     }
     const selectedEvents = notes.filter((note) => note.category === 'acara' && this.eventDate(note) === this.selectedDate).sort((a,b)=>String(a.eventTime || a.reminder?.datetime?.slice(11,16) || '99:99').localeCompare(String(b.eventTime || b.reminder?.datetime?.slice(11,16) || '99:99')));
     const list = document.getElementById('cp104DayEvents');
