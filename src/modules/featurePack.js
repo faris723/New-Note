@@ -1710,8 +1710,14 @@ export const FeaturePackService = {
       }
       const fileName = `${filePrefix}_CatatanPintar_${safeDateTag}.pdf`;
 
-      await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
-      this.ctx.toast('Laporan PDF berhasil dibuat dan diunduh.', 'info');
+      const saveResult = await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
+      if (saveResult?.method === 'android-downloads') {
+        this.ctx.toast(`✅ PDF tersimpan di Download/Catatan Pintar/${fileName}`, 'info', 6000);
+      } else if (saveResult?.method === 'blob-download') {
+        this.ctx.toast('PDF diproses lewat metode unduhan browser biasa — kalau tidak ketemu filenya, cek folder Download utama HP kamu, atau update aplikasi ke versi terbaru.', 'info', 7000);
+      } else {
+        this.ctx.toast('Laporan PDF berhasil dibuat dan diunduh.', 'info');
+      }
       modal.classList.remove('open');
     } catch (err) {
       this.ctx.toast(`Gagal membuat PDF: ${err.message || err}`, 'danger');
