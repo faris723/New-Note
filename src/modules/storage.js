@@ -363,7 +363,10 @@ export async function saveDataToDevice(data) {
 
     const jsonString = JSON.stringify(payload, null, 2);
 
-    // Save to Capacitor Filesystem (Directory.External — visible in file manager)
+    // Save to Capacitor Filesystem (Directory.External — visible in file manager).
+    // If this fails, IndexedDB below remains the fallback; if both fail, report
+    // the error instead of claiming that the save succeeded.
+    let fsSaved = false;
     try {
       await Filesystem.writeFile({
         path: config.dataFileName,
@@ -372,8 +375,9 @@ export async function saveDataToDevice(data) {
         encoding: Encoding.UTF8,
         recursive: true
       });
+      fsSaved = true;
     } catch (fsErr) {
-      // Running on web fallback (IndexedDB)
+      console.warn('Filesystem save fallback to IndexedDB:', fsErr);
     }
 
     // Tulis juga setiap catatan sebagai berkas .cnote terpisah,
@@ -385,7 +389,17 @@ export async function saveDataToDevice(data) {
     }
 
     // Mirror to active environment's isolated IndexedDB
-    await syncToIndexedDB(payload.notes, payload.categories);
+    let idbSaved = false;
+    try {
+      await syncToIndexedDB(payload.notes, payload.categories);
+      idbSaved = true;
+    } catch (idbErr) {
+      console.warn('IndexedDB save failed:', idbErr);
+    }
+
+    if (!fsSaved && !idbSaved) {
+      throw new Error('Penyimpanan perangkat dan IndexedDB sama-sama gagal. Data tidak dinyatakan tersimpan.');
+    }
 
     // Also persist directly to physical device file (immune to browser cookie/cache clearance)
     try {
@@ -509,9 +523,18 @@ export async function saveMediaAttachmentToFile(att, noteId) {
       console.warn('Physical media write warning (using IDB fallback):', fsWriteErr);
     }
 
-    // Save binary into IndexedDB as backup for preview
-    await saveAttachmentToIndexedDB(att, noteId);
+    // Save binary into IndexedDB as backup for preview. If it also fails,
+    // retain the original dataURL so the attachment is not turned into a
+    // pointer to a file that may not exist.
+    let idbSaved = false;
+    try {
+      await saveAttachmentToIndexedDB(att, noteId);
+      idbSaved = true;
+    } catch (idbErr) {
+      console.warn('IndexedDB attachment fallback failed:', idbErr);
+    }
 
+    const physicalSaved = Boolean(nativeUri || webviewSrc);
     return {
       id: att.id,
       name: att.name,
@@ -519,11 +542,10 @@ export async function saveMediaAttachmentToFile(att, noteId) {
       ext: safeExt,
       size: att.size,
       kind: att.kind,
-      filePath: relativePath,
+      filePath: physicalSaved ? relativePath : null,
       fileUri: nativeUri,
       webviewSrc: webviewSrc,
-      // Clear dataURL to keep JSON and RAM light
-      dataURL: null,
+      dataURL: (!physicalSaved && !idbSaved) ? att.dataURL : null,
       createdAt: att.createdAt || Date.now()
     };
   }
@@ -621,25 +643,24 @@ function getDB(envOverride = null) {
 
 async function syncToIndexedDB(notesList, customCats) {
   const db = await getDB();
-  if (!db) return;
+  if (!db) throw new Error('IndexedDB tidak tersedia.');
 
-  try {
-    const tx = db.transaction(['notes', 'categories'], 'readwrite');
-    const notesStore = tx.objectStore('notes');
-    const catsStore = tx.objectStore('categories');
-
-    // Sync notes
-    notesStore.clear();
-    (notesList || []).forEach(n => notesStore.put(n));
-
-    // Sync categories
-    catsStore.clear();
-    (customCats || []).filter(c => !c.core).forEach(c => catsStore.put(c));
-
-    await new Promise(res => { tx.oncomplete = () => res(true); });
-  } catch (e) {
-    console.warn('syncToIndexedDB warning:', e);
-  }
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn, value) => { if (settled) return; settled = true; fn(value); };
+    try {
+      const tx = db.transaction(['notes', 'categories'], 'readwrite');
+      const notesStore = tx.objectStore('notes');
+      const catsStore = tx.objectStore('categories');
+      notesStore.clear();
+      (notesList || []).forEach(n => notesStore.put(n));
+      catsStore.clear();
+      (customCats || []).filter(c => !c.core).forEach(c => catsStore.put(c));
+      tx.oncomplete = () => done(resolve, true);
+      tx.onerror = () => done(reject, tx.error || new Error('Transaksi IndexedDB gagal.'));
+      tx.onabort = () => done(reject, tx.error || new Error('Transaksi IndexedDB dibatalkan.'));
+    } catch (e) { done(reject, e); }
+  });
 }
 
 async function loadNotesFromIndexedDB() {
@@ -676,23 +697,45 @@ async function loadCategoriesFromIndexedDB() {
 
 async function saveAttachmentToIndexedDB(att, noteId) {
   const db = await getDB();
-  if (!db) return;
+  if (!db) throw new Error('IndexedDB lampiran tidak tersedia.');
 
-  try {
-    const tx = db.transaction('attachments', 'readwrite');
-    const attStore = tx.objectStore('attachments');
-    attStore.put({
-      id: att.id,
-      noteId,
-      name: att.name,
-      mime: att.mime,
-      ext: att.ext,
-      size: att.size,
-      dataURL: att.dataURL,
-      kind: att.kind,
-      createdAt: att.createdAt || Date.now()
-    });
-  } catch (e) {}
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn, value) => { if (settled) return; settled = true; fn(value); };
+    try {
+      const tx = db.transaction('attachments', 'readwrite');
+      const attStore = tx.objectStore('attachments');
+      attStore.put({
+        id: att.id,
+        noteId,
+        name: att.name,
+        mime: att.mime,
+        ext: att.ext,
+        size: att.size,
+        dataURL: att.dataURL,
+        kind: att.kind,
+        createdAt: att.createdAt || Date.now()
+      });
+      tx.oncomplete = () => done(resolve, true);
+      tx.onerror = () => done(reject, tx.error || new Error('Gagal menyimpan lampiran ke IndexedDB.'));
+      tx.onabort = () => done(reject, tx.error || new Error('Penyimpanan lampiran dibatalkan.'));
+    } catch (e) { done(reject, e); }
+  });
+}
+
+async function deleteAttachmentFromIndexedDB(id) {
+  if (!id) return;
+  const db = await getDB();
+  if (!db) return;
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('attachments', 'readwrite');
+      tx.objectStore('attachments').delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch (_) { resolve(false); }
+  });
 }
 
 async function getAttachmentFromIndexedDB(id) {
@@ -711,8 +754,82 @@ async function getAttachmentFromIndexedDB(id) {
   });
 }
 
+
+/**
+ * Environment-scoped finance storage. Finance used to live in global
+ * localStorage keys, which meant Browser/PWA and App modes could share data.
+ * The helpers below keep legacy keys readable once, then store all future data
+ * under an environment-specific key.
+ */
+export function getFinanceStorageKeys(envOverride = null) {
+  const env = envOverride || getStorageEnvironment();
+  return {
+    environment: env,
+    obligations: `cp_${env}_obligations_v2`,
+    savings: `cp_${env}_savings_v2`,
+    history: `cp_${env}_finance_history_v1`
+  };
+}
+
+export function getFinanceState(envOverride = null) {
+  const keys = getFinanceStorageKeys(envOverride);
+  const read = (key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  };
+
+  let obligations = read(keys.obligations);
+  let savings = read(keys.savings);
+  let history = read(keys.history);
+
+  // Migrate the old shared finance keys exactly once, and only into the
+  // environment that is active when the user first upgrades. This preserves
+  // existing data without silently cloning it into the other environment.
+  try {
+    const migrationKey = 'cp_finance_legacy_migrated_to_v1';
+    if (obligations === null && savings === null && history === null && !localStorage.getItem(migrationKey)) {
+      const legacyRead = (key) => {
+        try { const raw = localStorage.getItem(key); if (raw === null) return []; const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; }
+        catch (_) { return []; }
+      };
+      obligations = legacyRead('cp_obligations_v2');
+      if (!obligations.length) obligations = legacyRead('cp_obligations_v1');
+      savings = legacyRead('cp_savings_v2');
+      if (!savings.length) savings = legacyRead('cp_savings_v1');
+      history = legacyRead('cp_finance_history_v1');
+      if (obligations.length || savings.length || history.length) {
+        saveFinanceState({ obligations, savings, history }, envOverride);
+        localStorage.setItem(migrationKey, keys.environment);
+      } else {
+        obligations = []; savings = []; history = [];
+      }
+    }
+  } catch (_) {
+    obligations = obligations || []; savings = savings || []; history = history || [];
+  }
+
+  return { obligations: obligations || [], savings: savings || [], history: history || [] };
+}
+
+export function saveFinanceState(state = {}, envOverride = null) {
+  const keys = getFinanceStorageKeys(envOverride);
+  const normalize = (v) => Array.isArray(v) ? v : [];
+  try {
+    localStorage.setItem(keys.obligations, JSON.stringify(normalize(state.obligations)));
+    localStorage.setItem(keys.savings, JSON.stringify(normalize(state.savings)));
+    localStorage.setItem(keys.history, JSON.stringify(normalize(state.history).slice(-1000)));
+    return true;
+  } catch (e) {
+    throw new Error('Gagal menyimpan data keuangan: ' + e.message);
+  }
+}
+
 /* ==========================================================================
-   4. STORAGE SERVICE FACADE (ZERO LOCALSTORAGE DEPENDENCY)
+   4. STORAGE SERVICE FACADE
    ========================================================================== */
 
 export const StorageService = {
@@ -720,6 +837,9 @@ export const StorageService = {
   getStorageConfig,
   setStorageEnvironment,
   requestPersistentStorage,
+  getFinanceStorageKeys,
+  getFinanceState,
+  saveFinanceState,
 
   // Device File Vault (Anti-Browser-Clear Physical Persistence)
   isFileSystemAccessSupported,
@@ -855,35 +975,42 @@ export const StorageService = {
       } catch (e) { resolve([]); }
     });
 
-    if (!sourceNotes || sourceNotes.length === 0) {
-      return { success: false, message: `Tidak ada data catatan di ${sourceConfig.label} untuk disalin.` };
+    const sourceFinance = getFinanceState(fromEnv);
+    const hasFinance = sourceFinance.obligations.length || sourceFinance.savings.length || sourceFinance.history.length;
+    if ((!sourceNotes || sourceNotes.length === 0) && !hasFinance) {
+      return { success: false, message: `Tidak ada data catatan atau keuangan di ${sourceConfig.label} untuk disalin.` };
     }
 
-    // Open target DB
-    const targetDB = await getDB(toEnv);
-    if (!targetDB) return { success: false, message: 'Gagal mengakses ruang penyimpanan tujuan.' };
+    // Open target DB only when notes/categories exist. Finance state is stored
+    // separately but copied together so the environment switch is complete.
+    if (sourceNotes.length || (sourceCats || []).length) {
+      const targetDB = await getDB(toEnv);
+      if (!targetDB) return { success: false, message: 'Gagal mengakses ruang penyimpanan tujuan.' };
 
-    const tx = targetDB.transaction(['notes', 'categories'], 'readwrite');
-    const targetNotesStore = tx.objectStore('notes');
-    const targetCatsStore = tx.objectStore('categories');
-
-    sourceNotes.forEach(n => targetNotesStore.put(n));
-    (sourceCats || []).filter(c => !c.core).forEach(c => targetCatsStore.put(c));
-
-    await new Promise(res => { tx.oncomplete = () => res(true); });
-
-    // Also persist to target JSON file in Directory.External
-    try {
-      await Filesystem.writeFile({
-        path: targetConfig.dataFileName,
-        data: JSON.stringify({ version: 2, environment: toEnv, lastUpdated: Date.now(), categories: sourceCats, notes: sourceNotes }, null, 2),
-        directory: Directory.External,
-        encoding: Encoding.UTF8,
-        recursive: true
+      const tx = targetDB.transaction(['notes', 'categories'], 'readwrite');
+      const targetNotesStore = tx.objectStore('notes');
+      const targetCatsStore = tx.objectStore('categories');
+      sourceNotes.forEach(n => targetNotesStore.put(n));
+      (sourceCats || []).filter(c => !c.core).forEach(c => targetCatsStore.put(c));
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error || new Error('Gagal menyalin data catatan.'));
+        tx.onabort = () => reject(tx.error || new Error('Penyalinan data catatan dibatalkan.'));
       });
-    } catch (fsErr) {}
 
-    // If current active environment is the target, update inMemoryCache
+      try {
+        await Filesystem.writeFile({
+          path: targetConfig.dataFileName,
+          data: JSON.stringify({ version: 2, environment: toEnv, lastUpdated: Date.now(), categories: sourceCats, notes: sourceNotes }, null, 2),
+          directory: Directory.External,
+          encoding: Encoding.UTF8,
+          recursive: true
+        });
+      } catch (fsErr) {}
+    }
+
+    saveFinanceState(sourceFinance, toEnv);
+
     if (getStorageEnvironment() === toEnv) {
       inMemoryCache.notes = sourceNotes;
       inMemoryCache.categories = sourceCats;
@@ -892,7 +1019,7 @@ export const StorageService = {
     return {
       success: true,
       count: sourceNotes.length,
-      message: `Berhasil menyalin ${sourceNotes.length} catatan dari ${sourceConfig.label} ke ${targetConfig.label}.`
+      message: `Berhasil menyalin ${sourceNotes.length} catatan dan data keuangan dari ${sourceConfig.label} ke ${targetConfig.label}.`
     };
   },
 
@@ -951,6 +1078,8 @@ export const StorageService = {
     const customCategories = Array.isArray(categories)
       ? categories.filter(c => c && !c.core)
       : [];
+    if (!inMemoryCache.notes) inMemoryCache.notes = await this.loadNotes();
+    const previousNotes = Array.isArray(inMemoryCache.notes) ? inMemoryCache.notes.map(n => ({ ...n, attachments: Array.isArray(n.attachments) ? [...n.attachments] : [] })) : [];
 
     // Process every attachment so the canonical state contains only lightweight
     // attachment metadata while the binary lives in the attachment store/file.
@@ -972,7 +1101,25 @@ export const StorageService = {
 
     inMemoryCache.notes = processedNotes;
     inMemoryCache.categories = customCategories;
-    await saveDataToDevice({ notes: processedNotes, categories: customCategories });
+    try {
+      await saveDataToDevice({ notes: processedNotes, categories: customCategories });
+    } catch (err) {
+      inMemoryCache.notes = previousNotes;
+      throw err;
+    }
+
+    // Cleanup is deliberately AFTER the new snapshot is safely persisted.
+    const newAttachments = new Map();
+    processedNotes.forEach(n => (n.attachments || []).forEach(a => newAttachments.set(a.id, a)));
+    for (const oldNote of previousNotes) {
+      for (const oldAtt of (oldNote.attachments || [])) {
+        const nextAtt = newAttachments.get(oldAtt?.id);
+        if (!oldAtt?.id || !nextAtt || oldAtt.filePath !== nextAtt.filePath) {
+          if (oldAtt?.filePath && (!nextAtt || oldAtt.filePath !== nextAtt.filePath)) { try { await Filesystem.deleteFile({ path: oldAtt.filePath, directory: Directory.External }); } catch (_) {} }
+          if (!nextAtt) await deleteAttachmentFromIndexedDB(oldAtt?.id);
+        }
+      }
+    }
     return { success: true, count: processedNotes.length };
   },
 
@@ -1000,17 +1147,8 @@ export const StorageService = {
       inMemoryCache.notes = await this.loadNotes();
     }
 
-    // Clean up physical files that were intentionally removed from this note.
-    // Do this only after the new attachment list is known, so adding an image
-    // never removes unrelated attachments from the same note.
     const previous = inMemoryCache.notes.find(n => n.id === noteToSave.id);
-    const keepIds = new Set(processedAttachments.map(a => a.id));
-    for (const oldAtt of (previous?.attachments || [])) {
-      if (oldAtt?.id && !keepIds.has(oldAtt.id) && oldAtt.filePath) {
-        try { await Filesystem.deleteFile({ path: oldAtt.filePath, directory: Directory.External }); } catch (_) {}
-      }
-    }
-
+    const previousSnapshot = previous ? { ...previous, attachments: Array.isArray(previous.attachments) ? [...previous.attachments] : [] } : null;
     const idx = inMemoryCache.notes.findIndex(n => n.id === noteToSave.id);
     if (idx >= 0) {
       inMemoryCache.notes[idx] = noteToSave;
@@ -1018,11 +1156,25 @@ export const StorageService = {
       inMemoryCache.notes.unshift(noteToSave);
     }
 
-    // Persist full state to device storage
-    await saveDataToDevice({
-      notes: inMemoryCache.notes,
-      categories: inMemoryCache.categories || []
-    });
+    // Persist full state to device storage before deleting any old binary.
+    try {
+      await saveDataToDevice({
+        notes: inMemoryCache.notes,
+        categories: inMemoryCache.categories || []
+      });
+    } catch (err) {
+      if (idx >= 0 && previousSnapshot) inMemoryCache.notes[idx] = previousSnapshot;
+      else if (idx < 0) inMemoryCache.notes = inMemoryCache.notes.filter(n => n.id !== noteToSave.id);
+      throw err;
+    }
+
+    for (const oldAtt of (previousSnapshot?.attachments || [])) {
+      const nextAtt = processedAttachments.find(a => a.id === oldAtt?.id);
+      if (oldAtt?.id && (!nextAtt || oldAtt.filePath !== nextAtt.filePath)) {
+        if (oldAtt.filePath && (!nextAtt || oldAtt.filePath !== nextAtt.filePath)) { try { await Filesystem.deleteFile({ path: oldAtt.filePath, directory: Directory.External }); } catch (_) {} }
+        if (!nextAtt) await deleteAttachmentFromIndexedDB(oldAtt.id);
+      }
+    }
 
     return { success: true };
   },
@@ -1037,29 +1189,29 @@ export const StorageService = {
 
     const noteToDelete = inMemoryCache.notes.find(n => n.id === id);
 
-    // If note has attachments stored as physical files, remove them
+    const previousNotes = [...inMemoryCache.notes];
+    inMemoryCache.notes = inMemoryCache.notes.filter(n => n.id !== id);
+
+    // Persist the deletion first; only then remove binary attachment records.
+    try {
+      await saveDataToDevice({
+        notes: inMemoryCache.notes,
+        categories: inMemoryCache.categories || []
+      });
+    } catch (err) {
+      inMemoryCache.notes = previousNotes;
+      throw err;
+    }
+
     if (noteToDelete && Array.isArray(noteToDelete.attachments)) {
       for (const att of noteToDelete.attachments) {
         if (att.filePath) {
-          try {
-            await Filesystem.deleteFile({
-              path: att.filePath,
-              directory: Directory.External
-            });
-          } catch (e) {
-            console.warn('Attachment file delete warning:', e);
-          }
+          try { await Filesystem.deleteFile({ path: att.filePath, directory: Directory.External }); }
+          catch (e) { console.warn('Attachment file delete warning:', e); }
         }
+        await deleteAttachmentFromIndexedDB(att.id);
       }
     }
-
-    inMemoryCache.notes = inMemoryCache.notes.filter(n => n.id !== id);
-
-    // Persist updated list to device storage
-    await saveDataToDevice({
-      notes: inMemoryCache.notes,
-      categories: inMemoryCache.categories || []
-    });
 
     return { success: true };
   },

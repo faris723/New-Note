@@ -30,6 +30,12 @@ function getCapacitorApp() {
     : null;
 }
 
+function getFileOpenPlugin() {
+  return (typeof window !== 'undefined' && window.Capacitor?.Plugins?.FileOpen)
+    ? window.Capacitor.Plugins.FileOpen
+    : null;
+}
+
 function getCapacitorFilesystem() {
   return (typeof window !== 'undefined' && window.Capacitor?.Plugins?.Filesystem)
     ? window.Capacitor.Plugins.Filesystem
@@ -46,13 +52,26 @@ export const FileOpenService = {
 
     const CapacitorApp = getCapacitorApp();
     const Filesystem = getCapacitorFilesystem();
-    if (!CapacitorApp || !Filesystem) return; // plugin belum tersedia (misal belum di-cap-sync)
+    const FileOpen = getFileOpenPlugin();
+    if (!CapacitorApp || (!Filesystem && !FileOpen)) return; // plugin belum tersedia
 
     const tryReadAndHandle = async (url) => {
       if (!url) return;
       try {
-        const res = await Filesystem.readFile({ path: url, encoding: 'utf8' });
-        await onNoteFileOpened(res.data);
+        // Android file managers commonly deliver content:// URIs. Capacitor
+        // Filesystem.readFile expects an app filesystem path, so use the
+        // native ContentResolver bridge for external document URIs.
+        if (FileOpen?.readText) {
+          const native = await FileOpen.readText({ uri: url });
+          if (native?.text != null) { await onNoteFileOpened(native.text); return; }
+        }
+        if (Filesystem) {
+          const path = String(url).startsWith('file://') ? String(url).replace(/^file:\/\//, '') : url;
+          const res = await Filesystem.readFile({ path, encoding: 'utf8' });
+          await onNoteFileOpened(res.data);
+          return;
+        }
+        throw new Error('Tidak ada pembaca berkas native.');
       } catch (err) {
         console.warn('FileOpenService: gagal membaca berkas yang dibuka:', err);
       }

@@ -7,10 +7,12 @@
 import { SecurityService } from './security.js';
 import { AttachmentService } from './attachment.js';
 import { StorageService } from './storage.js';
+import { APP_VERSION } from '../version.js';
 
 const MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_IMPORT_NOTES = 10000;
 const MAX_IMPORT_ATTACHMENTS = 20000;
+const localDateTag = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 
 
 function crc32(bytes) {
@@ -240,17 +242,12 @@ export const ExportImportService = {
    */
   async exportNotes(notes, categories, format = 'json') {
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
+    const dateStr = localDateTag(now);
     const portableNotes = await buildPortableNotes(notes);
-    const readArray = (key) => { try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
-    const financeState = {
-      obligations: readArray('cp_obligations_v2'),
-      savings: readArray('cp_savings_v2'),
-      history: readArray('cp_finance_history_v1')
-    };
+    const financeState = StorageService.getFinanceState();
     const backupData = {
       app: 'Catatan Pintar — Offline',
-      version: '1.0.13',
+      version: APP_VERSION,
       exportedAt: now.toISOString(),
       notesCount: portableNotes.length,
       categories: categories.filter(c => !c.core),

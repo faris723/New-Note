@@ -13,13 +13,15 @@ import { SecurityService } from './security.js';
 import { APP_VERSION } from '../version.js';
 import { AttachmentService } from './attachment.js';
 import { FinancePdfReportService } from './financePdfReport.js';
+import { StorageService } from './storage.js';
 
 const OBL_KEY = 'cp_obligations_v2';
 const SAV_KEY = 'cp_savings_v2';
 const HIST_KEY = 'cp_finance_history_v1';
 const esc = (v) => SecurityService.escapeHtml(String(v ?? ''));
 const rupiah = (v) => 'Rp ' + Number(v || 0).toLocaleString('id-ID');
-const today = () => new Date().toISOString().slice(0, 10);
+const localDateFromTimestamp = (value = Date.now()) => { const d = new Date(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const today = () => localDateFromTimestamp();
 const uid = (prefix = 'item') => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const EVENT_TYPES = [
@@ -63,13 +65,20 @@ export function formatIndonesianDate(dateStr) {
 }
 const loadJSON = (key, fallback = []) => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(key));
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
+    const state = StorageService.getFinanceState();
+    if (key === OBL_KEY) return Array.isArray(state.obligations) ? state.obligations : fallback;
+    if (key === SAV_KEY) return Array.isArray(state.savings) ? state.savings : fallback;
+    if (key === HIST_KEY) return Array.isArray(state.history) ? state.history : fallback;
     return fallback;
-  }
+  } catch (_) { return fallback; }
 };
-const saveJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+const saveJSON = (key, value) => {
+  const state = StorageService.getFinanceState();
+  if (key === OBL_KEY) state.obligations = Array.isArray(value) ? value : [];
+  else if (key === SAV_KEY) state.savings = Array.isArray(value) ? value : [];
+  else if (key === HIST_KEY) state.history = Array.isArray(value) ? value.slice(-1000) : [];
+  StorageService.saveFinanceState(state);
+};
 const loadHistory = () => loadJSON(HIST_KEY, []);
 const saveHistory = (items) => saveJSON(HIST_KEY, items.slice(-1000));
 const addHistory = (entry) => { const items = loadHistory(); items.push({ id: uid('hist'), at: Date.now(), ...entry }); saveHistory(items); };
@@ -505,7 +514,19 @@ export const FeaturePackService = {
 
   getTxBase() {
     const notes = this.ctx?.getNotes?.() || [];
-    return notes.filter((note) => note.category === 'keuangan' && note.finance).map((note) => ({ ...note, amount: Number(note.finance.amount) || 0, type: note.finance.type || 'expense', date: note.finance.date || new Date(note.updatedAt || note.createdAt || Date.now()).toISOString().slice(0, 10), funding: Array.isArray(note.finance.funding) && note.finance.funding.length ? note.finance.funding : [{ id: 'net', amount: Number(note.finance.amount) || 0 }] }));
+    return notes.filter((note) => note.category === 'keuangan' && note.finance).map((note) => {
+      const amount = Number(note.finance.amount) || 0;
+      const type = note.finance.type || 'expense';
+      return {
+        ...note,
+        amount,
+        type,
+        date: note.finance.date || localDateFromTimestamp(note.updatedAt || note.createdAt || Date.now()),
+        funding: Array.isArray(note.finance.funding) && note.finance.funding.length ? note.finance.funding : [{ id: 'net', amount }],
+        paidAmount: type === 'debt' ? debtPaidAmount(note) : Number(note.finance.paidAmount || 0),
+        payments: Array.isArray(note.finance.payments) ? note.finance.payments : []
+      };
+    });
   },
 
   getBaseNetBalance(excludeNoteId = null) {
@@ -630,6 +651,8 @@ export const FeaturePackService = {
   },
 
   renderFinance() {
+    this.obligations = loadJSON(OBL_KEY, []);
+    this.savings = loadJSON(SAV_KEY, []);
     const tx = this.getTx();
     const income = tx.filter((x) => x.type === 'income').reduce((sum, x) => sum + x.amount, 0);
     const expense = tx.filter((x) => x.type === 'expense').reduce((sum, x) => sum + x.amount, 0);
@@ -1130,7 +1153,7 @@ export const FeaturePackService = {
   eventDate(note) {
     if (note.eventDate) return String(note.eventDate).slice(0, 10);
     if (note.reminder?.datetime) return String(note.reminder.datetime).slice(0, 10);
-    return new Date(note.updatedAt || note.createdAt || Date.now()).toISOString().slice(0, 10);
+    return localDateFromTimestamp(note.updatedAt || note.createdAt || Date.now());
   },
 
   renderCalendar() {
@@ -1180,11 +1203,16 @@ export const FeaturePackService = {
     await this.ctx.batchMove(ids, target.trim()); this.ctx.clearSelection(); this.syncBatchBar();
   },
 
-  batchExport() {
+  async batchExport() {
     const ids = this.ctx.getSelectedIds(); if (!ids.length) return;
-    const data = (this.ctx.getNotes() || []).filter((note) => ids.includes(note.id));
-    const url = URL.createObjectURL(new Blob([JSON.stringify({ app: 'Catatan Pintar', notes: data }, null, 2)], { type: 'application/json' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'catatan-terpilih.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      const data = (this.ctx.getNotes() || []).filter((note) => ids.includes(note.id));
+      const json = JSON.stringify({ app: 'Catatan Pintar', version: APP_VERSION, exportedAt: new Date().toISOString(), notes: data }, null, 2);
+      const result = await AttachmentService.saveOrDownloadBlob(new Blob([json], { type: 'application/json' }), `CatatanPintar_Terpilih_${today()}.json`, 'application/json');
+      this.ctx.toast(result?.method === 'android-downloads' ? 'Ekspor catatan terpilih tersimpan di Download/Catatan Pintar.' : 'Ekspor catatan terpilih berhasil dibuat.', 'info');
+    } catch (err) {
+      this.ctx.toast(`Gagal mengekspor catatan terpilih: ${err.message || err}`, 'danger');
+    }
   },
 
   syncBatchBar() {
@@ -1330,7 +1358,9 @@ export const FeaturePackService = {
 
       const updateScopeButtonsUI = (scope) => {
         currentScope = scope;
+        modal.dataset.reportScope = scope;
         modal.querySelectorAll('.cp-scope-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.scope === scope);
           btn.classList.toggle('primary', btn.dataset.scope === scope);
           if (btn.dataset.scope === scope) {
             btn.style.borderColor = '#27352b';
@@ -1423,7 +1453,7 @@ export const FeaturePackService = {
           cDebt.checked = true;
           cObl.checked = true;
           cSav.checked = true;
-          cHist.checked = false;
+          cHist.checked = true;
         }
         updateScopeButtonsUI(scope);
         updateLivePreview();
@@ -1460,31 +1490,31 @@ export const FeaturePackService = {
       };
       modal.querySelector('#cp104ExpPreset7Days').onclick = () => {
         const d = new Date();
-        d.setDate(d.getDate() - 7);
-        modal.querySelector('#cp104ExpFrom').value = d.toISOString().slice(0, 10);
+        d.setDate(d.getDate() - 6);
+        modal.querySelector('#cp104ExpFrom').value = localDateFromTimestamp(d.getTime());
         modal.querySelector('#cp104ExpTo').value = today();
         updateLivePreview();
       };
       modal.querySelector('#cp104ExpPresetThisMonth').onclick = () => {
         const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+        const start = localDateFromTimestamp(new Date(now.getFullYear(), now.getMonth(), 1).getTime());
+        const end = localDateFromTimestamp(new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime());
         modal.querySelector('#cp104ExpFrom').value = start;
         modal.querySelector('#cp104ExpTo').value = end;
         updateLivePreview();
       };
       modal.querySelector('#cp104ExpPresetLastMonth').onclick = () => {
         const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-        const end = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+        const start = localDateFromTimestamp(new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime());
+        const end = localDateFromTimestamp(new Date(now.getFullYear(), now.getMonth(), 0).getTime());
         modal.querySelector('#cp104ExpFrom').value = start;
         modal.querySelector('#cp104ExpTo').value = end;
         updateLivePreview();
       };
       modal.querySelector('#cp104ExpPresetYear').onclick = () => {
         const now = new Date();
-        const start = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
-        const end = new Date(now.getFullYear(), 11, 31).toISOString().slice(0, 10);
+        const start = localDateFromTimestamp(new Date(now.getFullYear(), 0, 1).getTime());
+        const end = localDateFromTimestamp(new Date(now.getFullYear(), 11, 31).getTime());
         modal.querySelector('#cp104ExpFrom').value = start;
         modal.querySelector('#cp104ExpTo').value = end;
         updateLivePreview();
@@ -1542,7 +1572,7 @@ export const FeaturePackService = {
             backupFormat: 'finance-v2',
             version: APP_VERSION,
             exportedAt: new Date().toISOString(),
-            transactions: this.getTx().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })),
+            transactions: this.getTxBase().map((n) => ({ id: n.id, title: n.title, type: n.type, amount: n.amount, date: n.date, finance: n.finance })),
             obligations: this.obligations,
             savings: this.savings,
             history: loadHistory()
@@ -1651,7 +1681,10 @@ export const FeaturePackService = {
 
       const savingsTotal = this.savings.reduce((sum, x) => sum + Number(x.balance || 0), 0);
 
-      const netBalance = incomeTotal - expenseTotal;
+      const netExpenseFromNet = expenseList.reduce((sum, x) => sum + sumFunding((x.funding || []).filter(f => f.id === 'net')), 0);
+      const paidDebtNet = debtList.reduce((sum, x) => sum + netFromPayments(debtPayments(x)), 0);
+      const paidObNet = this.obligations.reduce((sum, x) => sum + netFromPayments(obligationPayments(x)), 0);
+      const netBalance = incomeTotal - netExpenseFromNet - paidDebtNet - paidObNet;
 
       const summaryData = {
         expenseTotal,
@@ -1679,7 +1712,7 @@ export const FeaturePackService = {
       // Filter history log jika disertakan
       const allHistory = loadHistory().filter((h) => {
         if (!h.at) return false;
-        const hDate = new Date(h.at).toISOString().slice(0, 10);
+        const hDate = localDateFromTimestamp(h.at);
         if (fromDate && hDate < fromDate) return false;
         if (toDate && hDate > toDate) return false;
         return true;
@@ -1687,6 +1720,7 @@ export const FeaturePackService = {
 
       // Generate PDF Blob
       const pdfBlob = await FinancePdfReportService.generateReport({
+        reportScope,
         fromDate,
         toDate,
         sections,
