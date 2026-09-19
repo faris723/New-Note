@@ -36,7 +36,7 @@ let selectedNoteIds = new Set();
 let recTimerInterval = null;
 let recSeconds = 0;
 let autoDetectCategoryEnabled = true;
-const TOOL_ONLY_CATEGORIES = new Set(['keuangan']);
+const TOOL_ONLY_CATEGORIES = new Set(['keuangan', 'acara']);
 
 // DOM Elements cache
 const el = {};
