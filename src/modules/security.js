@@ -26,14 +26,20 @@ export const SecurityService = {
       const allowedTags = new Set([
         'P','BR','DIV','SPAN','B','STRONG','I','EM','U','S','DEL','MARK',
         'UL','OL','LI','BLOCKQUOTE','PRE','CODE','TABLE','THEAD','TBODY',
-        'TFOOT','TR','TH','TD','HR','H1','H2','H3','H4','H5','H6','IMG'
+        'TFOOT','TR','TH','TD','HR','H1','H2','H3','H4','H5','H6','IMG',
+        'INPUT','A','BUTTON'
       ]);
-      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src','data-att-id','data-cp104-caret','contenteditable','style']);
+      const allowedAttrs = new Set(['class','title','alt','width','height','colspan','rowspan','src','data-att-id','data-cp104-caret','contenteditable','style','type','checked','data-lang','href','target','rel','data-task-done']);
       const nodes = Array.from(doc.body.querySelectorAll('*'));
 
       for (const node of nodes) {
         if (!allowedTags.has(node.tagName)) {
           node.replaceWith(...Array.from(node.childNodes));
+          continue;
+        }
+
+        if (node.tagName === 'INPUT' && (node.getAttribute('type') || '').toLowerCase() !== 'checkbox') {
+          node.remove();
           continue;
         }
 
@@ -51,6 +57,12 @@ export const SecurityService = {
             // Notes must never cause arbitrary network requests. Only embedded
             // image data is allowed. SVG is deliberately excluded.
             if (!/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)) {
+              node.removeAttribute(attr.name);
+            }
+          }
+
+          if (name === 'href') {
+            if (!/^(?:https?:\/\/|mailto:|#)/i.test(value)) {
               node.removeAttribute(attr.name);
             }
           }

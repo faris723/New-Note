@@ -17,9 +17,10 @@ import { PWAService } from './modules/pwa.js';
 import { UpdateService } from './modules/update.js';
 import { FileOpenService } from './modules/fileOpen.js';
 import { APP_VERSION } from './version.js';
-import { FeaturePackService } from './modules/featurePack.js';
+import { FeaturePackService, EVENT_TYPES } from './modules/featurePack.js';
 import { App as CapacitorApp } from '@capacitor/app';
 import { PdfViewer } from './modules/pdfViewer.js';
+import { EngineerEditorService } from './modules/engineerEditor.js';
 
 // Application State
 let notes = [];
@@ -35,14 +36,14 @@ let selectedNoteIds = new Set();
 let recTimerInterval = null;
 let recSeconds = 0;
 let autoDetectCategoryEnabled = true;
-const TOOL_ONLY_CATEGORIES = new Set(['keuangan', 'acara']);
+const TOOL_ONLY_CATEGORIES = new Set(['keuangan']);
 
 // DOM Elements cache
 const el = {};
 
 function cacheElements() {
   const ids = [
-    'financeBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
+    'financeBtn', 'scheduleBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
     'installAppBtn', 'updateBadgeBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
     'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
     'envBadgeBtn', 'envBadgeIcon', 'envBadgeText',
@@ -56,6 +57,13 @@ function cacheElements() {
     'chipsRow', 'notesList', 'emptyState', 'fabChat', 'fabAdd',
     'overlay', 'editorModeLabel', 'pinEditorBtn', 'closeEditorBtn', 'noteTitle', 'toolbar', 'fontSizeSelect', 'fontFamilySelect',
     'insertTableBtn', 'openSketchBtn', 'insertFileBtn', 'inlineFileInput', 'noteBody',
+    'toggleMarkdownBtn', 'modeToggleLabel', 'shortcutHelpBtn', 'shortcutOverlay', 'closeShortcutBtn', 'shortcutOkBtn',
+    'headingH1Btn', 'headingH2Btn', 'insertTaskBtn', 'insertInlineCodeBtn', 'insertCodeBlockBtn', 'insertQuoteBtn', 'insertLinkBtn',
+    'noteMarkdownArea', 'copyMarkdownBtn', 'cleanFormatBtn',
+    'statWordCount', 'statCharCount', 'statLineCount', 'editorReadTime',
+    'drawerReminderBtn', 'drawerFinanceBtn', 'drawerAttachBtn',
+    'drawerReminderPanel', 'drawerFinancePanel', 'drawerAttachPanel',
+    'reminderDot', 'financeDot', 'attachCountBadge',
     'categorySelect', 'categoryHint',
     'reminderRow', 'noteReminderInput', 'clearReminderBtn', 'notifyPermBtn',
     'financeRow', 'financeType', 'financeAmount',
@@ -417,6 +425,63 @@ function renderNotesList() {
       card.appendChild(finRow);
     }
 
+    // Event badge & location with icons for 'acara'
+    if (note.category === 'acara') {
+      const eventRow = document.createElement('div');
+      eventRow.className = 'flex items-center flex-wrap gap-1.5 mt-2 pt-1.5 border-t border-[var(--card-edge)] text-[11px]';
+
+      const typeObj = (typeof EVENT_TYPES !== 'undefined' ? EVENT_TYPES : []).find(t => t.id === (note.eventType || 'umum')) || { id: 'umum', label: 'Umum', icon: '📌', defaultColor: '#47593f' };
+      const eventColor = note.eventColor || typeObj.defaultColor || '#47593f';
+
+      // Type Badge
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded';
+      typeBadge.style.background = `${eventColor}18`;
+      typeBadge.style.color = eventColor;
+      typeBadge.style.border = `1px solid ${eventColor}40`;
+      typeBadge.innerHTML = `<span>${typeObj.icon}</span> <span>${SecurityService.escapeHtml(typeObj.label)}</span>`;
+      eventRow.appendChild(typeBadge);
+
+      // Event Date with calendar icon
+      const dateStr = note.eventDate || (note.reminder?.datetime ? String(note.reminder.datetime).slice(0, 10) : '');
+      if (dateStr) {
+        const dateBadge = document.createElement('span');
+        dateBadge.className = 'inline-flex items-center gap-1 text-[var(--ink-soft)] bg-[var(--paper,#faf7ef)] border border-[var(--card-edge,#ddd)] px-2 py-0.5 rounded font-medium';
+        let formattedDate = dateStr;
+        try {
+          const parts = dateStr.split('-');
+          if (parts.length === 3) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            formattedDate = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+          }
+        } catch (_) {}
+        dateBadge.innerHTML = `<span>📅</span> <span>${SecurityService.escapeHtml(formattedDate)}</span>`;
+        eventRow.appendChild(dateBadge);
+      }
+
+      // Event Time with clock logo
+      const timeStr = note.reminder?.datetime ? String(note.reminder.datetime).slice(11, 16) : (note.eventTime || '');
+      if (timeStr) {
+        const timeBadge = document.createElement('span');
+        timeBadge.className = 'inline-flex items-center gap-1 text-[var(--ink-soft)] bg-[var(--paper,#faf7ef)] border border-[var(--card-edge,#ddd)] px-2 py-0.5 rounded font-medium';
+        timeBadge.innerHTML = `<span>🕐</span> <span>${SecurityService.escapeHtml(timeStr)} WIB</span>`;
+        eventRow.appendChild(timeBadge);
+      }
+
+      // Event Location with map pin logo
+      if (note.eventLocation) {
+        const locBadge = document.createElement('span');
+        locBadge.className = 'inline-flex items-center gap-1 text-[#204b2b] bg-[#eef4f0] border border-[#d4e5d8] px-2 py-0.5 rounded font-medium';
+        locBadge.innerHTML = `<span>📍</span> <span>${SecurityService.escapeHtml(note.eventLocation)}</span>`;
+        eventRow.appendChild(locBadge);
+      }
+
+      // Card accent edge colored to match the user's chosen event color
+      card.style.borderLeft = `4px solid ${eventColor}`;
+
+      card.appendChild(eventRow);
+    }
+
     // Attachment badges count
     if (note.attachments && note.attachments.length > 0) {
       const attachInfo = document.createElement('div');
@@ -510,9 +575,15 @@ function openNoteEditor(note = null) {
     if (incomeFromEl) incomeFromEl.value = note.finance?.incomeFrom || '';
     if (expenseForEl) expenseForEl.value = note.finance?.expenseFor || '';
     const eventDateEl = document.getElementById('cp104EventDate');
+    const eventTimeEl = document.getElementById('cp104EventTime');
     const eventLocationEl = document.getElementById('cp104EventLocation');
+    const eventTypeEl = document.getElementById('cp104EventType');
+    const eventColorEl = document.getElementById('cp104EventColor');
     if (eventDateEl) eventDateEl.value = note.eventDate || (note.reminder?.datetime ? note.reminder.datetime.slice(0,10) : '');
+    if (eventTimeEl) eventTimeEl.value = note.eventTime || (note.reminder?.datetime ? note.reminder.datetime.slice(11,16) : '09:00');
     if (eventLocationEl) eventLocationEl.value = note.eventLocation || '';
+    if (eventTypeEl) eventTypeEl.value = note.eventType || 'umum';
+    if (eventColorEl) eventColorEl.value = note.eventColor || '#47593f';
 
     currentAttachments = (note.attachments || []).map(a => ({ ...a }));
     removeOrphanInlineAttachmentChips();
@@ -542,9 +613,15 @@ function openNoteEditor(note = null) {
     if (incomeFromEl) incomeFromEl.value = '';
     if (expenseForEl) expenseForEl.value = '';
     const eventDateEl = document.getElementById('cp104EventDate');
+    const eventTimeEl = document.getElementById('cp104EventTime');
     const eventLocationEl = document.getElementById('cp104EventLocation');
-    if (eventDateEl) eventDateEl.value = '';
+    const eventTypeEl = document.getElementById('cp104EventType');
+    const eventColorEl = document.getElementById('cp104EventColor');
+    if (eventDateEl) eventDateEl.value = new Date().toISOString().slice(0,10);
+    if (eventTimeEl) eventTimeEl.value = '09:00';
     if (eventLocationEl) eventLocationEl.value = '';
+    if (eventTypeEl) eventTypeEl.value = 'umum';
+    if (eventColorEl) eventColorEl.value = '#47593f';
 
     currentAttachments = [];
     FeaturePackService.setEditorFunding([{id:'net',amount:0}], 0, null);
@@ -553,6 +630,7 @@ function openNoteEditor(note = null) {
     el.exportNoteBtn.style.display = 'none';
   }
 
+  try { el.categorySelect.dispatchEvent(new Event('change')); } catch (_) {}
   updateEditorPinUI();
 
   // Check notification permission state
@@ -563,6 +641,7 @@ function openNoteEditor(note = null) {
   }
 
   renderAttachmentsList();
+  EngineerEditorService.resetState(currentAttachments);
   el.overlay.classList.add('open');
   el.noteTitle.focus();
 }
@@ -590,6 +669,7 @@ function closeNoteEditor() {
 }
 
 async function saveCurrentNote() {
+  EngineerEditorService.syncBeforeSave();
   const previousNote = currentNoteId ? notes.find(n => n.id === currentNoteId) : null;
   const title = el.noteTitle.value.trim() || 'Tanpa Judul';
   const bodyHTML = SecurityService.sanitizeHTML(el.noteBody.innerHTML);
@@ -630,12 +710,26 @@ async function saveCurrentNote() {
   }
 
   const eventDateEl = document.getElementById('cp104EventDate');
+  const eventTimeEl = document.getElementById('cp104EventTime');
   const eventLocationEl = document.getElementById('cp104EventLocation');
-  const eventDate = category === 'acara' ? ((eventDateEl?.value || '').trim() || (el.noteReminderInput.value ? el.noteReminderInput.value.slice(0,10) : '')) : '';
+  const eventTypeEl = document.getElementById('cp104EventType');
+  const eventColorEl = document.getElementById('cp104EventColor');
+  const eventDate = category === 'acara' ? ((eventDateEl?.value || '').trim() || (el.noteReminderInput.value ? el.noteReminderInput.value.slice(0,10) : new Date().toISOString().slice(0,10))) : '';
+  const eventTime = category === 'acara' ? ((eventTimeEl?.value || '').trim() || (el.noteReminderInput.value ? el.noteReminderInput.value.slice(11,16) : '09:00')) : '';
   const eventLocation = category === 'acara' ? (eventLocationEl?.value || '').trim() : '';
+  const eventType = category === 'acara' ? (eventTypeEl?.value || 'umum') : (previousNote?.eventType || 'umum');
+  const eventColor = category === 'acara' ? (eventColorEl?.value || '#47593f') : (previousNote?.eventColor || '#47593f');
   if (category === 'acara' && !eventDate) {
     UIService.showToast('Tanggal acara wajib diisi.', 'danger');
     return;
+  }
+
+  // Jika acara belum dipasang reminder eksplisit, pasang otomatis berdasarkan tanggal & jam acara
+  if (category === 'acara' && !reminder && eventDate) {
+    reminder = {
+      datetime: `${eventDate}T${eventTime || '09:00'}`,
+      notified: false
+    };
   }
 
   const now = Date.now();
@@ -652,7 +746,10 @@ async function saveCurrentNote() {
       finance,
       reminder,
       eventDate,
+      eventTime,
       eventLocation,
+      eventType,
+      eventColor,
       attachments: currentAttachments,
       updatedAt: now
     };
@@ -668,7 +765,10 @@ async function saveCurrentNote() {
       finance,
       reminder,
       eventDate,
+      eventTime,
       eventLocation,
+      eventType,
+      eventColor,
       attachments: currentAttachments,
       createdAt: now,
       updatedAt: now
@@ -788,6 +888,7 @@ function renderAttachmentsList() {
     item.appendChild(right);
     el.attachList.appendChild(item);
   });
+  EngineerEditorService.updateDrawerStatus(currentAttachments);
 }
 
 async function fileToAttachment(file) {
@@ -1969,8 +2070,9 @@ function bindEventListeners() {
     renderNotesList();
   };
 
-  // Finance shortcut: arahkan ke tool Keuangan baru agar tidak ada dua logika keuangan berbeda.
+  // Finance & Schedule shortcuts
   el.financeBtn.onclick = () => FeaturePackService.switchTab('finance');
+  if (el.scheduleBtn) el.scheduleBtn.onclick = () => FeaturePackService.switchTab('schedule');
   el.closeFinanceBtn.onclick = () => el.financeOverlay.classList.remove('open');
   el.closeFinanceTopBtn.onclick = () => el.financeOverlay.classList.remove('open');
   el.financeFrom.onchange = updateFinanceView;
@@ -2496,6 +2598,18 @@ async function init() {
   bindEventListeners();
   updateEnvironmentBadgeUI();
 
+  // Initialize Interactive Engineer Editor
+  try {
+    EngineerEditorService.init({
+      noteBody: el.noteBody,
+      noteMarkdownArea: document.getElementById('noteMarkdownArea'),
+      toggleMarkdownBtn: document.getElementById('toggleMarkdownBtn'),
+      modeToggleLabel: document.getElementById('modeToggleLabel')
+    });
+  } catch (editorErr) {
+    console.warn('EngineerEditorService init notice:', editorErr);
+  }
+
   // Initialize Canvas Sketch Service
   try {
     if (el.sketchCanvas) {
@@ -2649,7 +2763,14 @@ async function init() {
       async (triggeredNote) => {
         ReminderService.activeAlertNote = triggeredNote;
         if (el.reminderAlertTitle) el.reminderAlertTitle.textContent = triggeredNote.title || 'Catatan';
-        if (el.reminderAlertBody) el.reminderAlertBody.textContent = SecurityService.stripHtml(triggeredNote.bodyHTML || '');
+        let bodyText = SecurityService.stripHtml(triggeredNote.bodyHTML || '');
+        if (triggeredNote.category === 'acara' && (triggeredNote.eventTime || triggeredNote.eventLocation)) {
+          const parts = [];
+          if (triggeredNote.eventTime) parts.push(`🕐 ${triggeredNote.eventTime} WIB`);
+          if (triggeredNote.eventLocation) parts.push(`📍 ${triggeredNote.eventLocation}`);
+          bodyText = (parts.length ? parts.join('  •  ') + '\n\n' : '') + bodyText;
+        }
+        if (el.reminderAlertBody) el.reminderAlertBody.textContent = bodyText;
         if (el.reminderAlertOverlay) el.reminderAlertOverlay.classList.add('open');
 
         // Update storage

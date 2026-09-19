@@ -21,6 +21,46 @@ const esc = (v) => SecurityService.escapeHtml(String(v ?? ''));
 const rupiah = (v) => 'Rp ' + Number(v || 0).toLocaleString('id-ID');
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix = 'item') => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+export const EVENT_TYPES = [
+  { id: 'umum', label: 'Umum', icon: '📌', defaultColor: '#47593f' },
+  { id: 'kerja', label: 'Pekerjaan', icon: '💼', defaultColor: '#2563eb' },
+  { id: 'pribadi', label: 'Pribadi', icon: '👤', defaultColor: '#10b981' },
+  { id: 'rapat', label: 'Rapat / Meeting', icon: '🤝', defaultColor: '#8b5cf6' },
+  { id: 'ulang_tahun', label: 'Ulang Tahun / Acara', icon: '🎂', defaultColor: '#ec4899' },
+  { id: 'belajar', label: 'Belajar / Kuliah', icon: '📚', defaultColor: '#0d9488' },
+  { id: 'kesehatan', label: 'Kesehatan / Janji', icon: '🏥', defaultColor: '#f59e0b' },
+  { id: 'mendesak', label: 'Penting / Mendesak', icon: '⭐', defaultColor: '#ef4444' },
+  { id: 'lainnya', label: 'Lainnya', icon: '🎈', defaultColor: '#475569' }
+];
+
+export const EVENT_COLOR_PRESETS = [
+  { name: 'Hijau Lumut', hex: '#47593f' },
+  { name: 'Emerald', hex: '#10b981' },
+  { name: 'Biru Samudera', hex: '#2563eb' },
+  { name: 'Indigo', hex: '#4f46e5' },
+  { name: 'Ungu Violet', hex: '#8b5cf6' },
+  { name: 'Oranye Amber', hex: '#f59e0b' },
+  { name: 'Merah Koral', hex: '#ef4444' },
+  { name: 'Merah Muda', hex: '#ec4899' },
+  { name: 'Biru Teal', hex: '#0d9488' },
+  { name: 'Abu Gelap', hex: '#475569' }
+];
+
+export function formatIndonesianDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length < 3) return dateStr;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const dateObj = new Date(y, m - 1, d);
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const dayName = dayNames[dateObj.getDay()] || '';
+  const monthName = monthNames[m - 1] || '';
+  return `${dayName}, ${d} ${monthName} ${y}`;
+}
 const loadJSON = (key, fallback = []) => {
   try {
     const parsed = JSON.parse(localStorage.getItem(key));
@@ -90,29 +130,75 @@ function addStyle() {
     .cp104-stat-debt .cp104-stat-ico{background:#e5def1;color:#493761}
     .cp104-stat-savings .cp104-stat-ico{background:#dcebf0;color:#274752}
     .cp104-stat-obligation .cp104-stat-ico{background:#f3ead2;color:#4b3b1e}
-    .cp104-cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 8px;font-size:10px;color:var(--ink-soft,#667)}
+    .cp104-schedule-card{background:#fffdf9;border:1px solid #e3dccf;border-radius:14px;padding:16px;box-shadow:0 4px 16px rgba(40,30,20,.04)}
+    .cp104-schedule-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+    .cp104-month-title-wrap{display:flex;align-items:center;gap:10px}
+    .cp104-month-title{font-size:18px;font-weight:800;color:var(--ink,#27352b);letter-spacing:-.01em}
+    .cp104-month-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:#f1ebd9;color:#5d513c}
+    .cp104-cal-nav-group{display:inline-flex;align-items:center;background:#ede6d6;padding:3px;border-radius:10px;gap:2px}
+    .cp104-cal-nav-btn{border:none;background:transparent;padding:5px 11px;border-radius:7px;font-size:12px;font-weight:700;color:var(--ink,#27352b);cursor:pointer;transition:background .15s ease}
+    .cp104-cal-nav-btn:hover{background:#fff}
+    .cp104-type-filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;scrollbar-width:thin}
+    .cp104-type-chip{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #dfd8c8;background:#faf7ee;color:var(--ink-soft,#556);cursor:pointer;transition:all .15s ease}
+    .cp104-type-chip:hover{border-color:var(--moss,#47593f);background:#fff}
+    .cp104-type-chip.active{background:var(--ink,#27352b);color:#fff;border-color:var(--ink,#27352b)}
+    .cp104-type-chip .chip-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+    .cp104-cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 10px;font-size:11px;color:var(--ink-soft,#667);align-items:center}
     .cp104-cal-legend span{display:inline-flex;align-items:center;gap:4px}
     .cp104-legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 auto}
-    .cp104-legend-dot.today{background:#f2f6ef;border:2px solid var(--moss,#47593f);width:6px;height:6px}
-    .cp104-legend-dot.sel{background:transparent;border:2px solid var(--ink,#27352b);width:6px;height:6px}
+    .cp104-legend-dot.today{background:#d1fae5;border:2px solid #10b981;width:7px;height:7px}
+    .cp104-legend-dot.sel{background:transparent;border:2px solid var(--ink,#27352b);width:7px;height:7px}
     .cp104-legend-dot.ev{background:var(--moss,#47593f)}
-    .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-    .cp104-cal-head{text-align:center;font-weight:700;padding:4px 0 6px;font-size:11px;color:var(--ink-soft,#667)}
-    .cp104-cal-head.weekend{color:#a3402f}
-    .cp104-day{position:relative;min-height:58px;border:1px solid #e7e1d3;background:#fff;border-radius:8px;padding:5px 4px;font-size:11px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:transform .1s ease,box-shadow .1s ease;user-select:none;-webkit-tap-highlight-color:transparent}
-    .cp104-day:active{transform:scale(.92)}
+    .cp104-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+    .cp104-cal-head{text-align:center;font-weight:700;padding:4px 0 6px;font-size:11px;color:#736b5e;letter-spacing:.02em}
+    .cp104-cal-head.weekend{color:#b91c1c}
+    .cp104-day{position:relative;min-height:60px;border:1px solid #e5dfd2;background:#fff;border-radius:9px;padding:5px 4px;font-size:11px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;user-select:none;-webkit-tap-highlight-color:transparent}
+    .cp104-day:hover{border-color:#b8af9d;box-shadow:0 2px 6px rgba(0,0,0,.03)}
+    .cp104-day:active{transform:scale(.94)}
     .cp104-day.muted{visibility:hidden;pointer-events:none}
-    .cp104-day.today{border-color:var(--moss,#47593f);background:#f2f6ef}
-    .cp104-day.today b{color:var(--moss,#47593f)}
-    .cp104-day.sel{outline:2px solid var(--ink,#27352b);outline-offset:-1px;box-shadow:0 3px 10px rgba(0,0,0,.14)}
-    .cp104-day b{font-weight:700;font-size:12px}
-    .cp104-day-dots{display:flex;gap:2px;flex-wrap:wrap;align-items:center;margin-top:auto}
-    .cp104-day-dot{width:6px;height:6px;border-radius:50%;background:var(--moss,#47593f);flex:0 0 auto}
-    .cp104-day-more{font-size:8.5px;color:var(--ink-soft,#667);font-weight:700;line-height:1}
+    .cp104-day.today{border-color:#10b981;background:#f0fdf4}
+    .cp104-day.today b{color:#065f46;background:#d1fae5;padding:0 4px;border-radius:4px;display:inline-block;width:fit-content}
+    .cp104-day.sel{outline:2px solid var(--ink,#27352b);outline-offset:-1px;box-shadow:0 3px 12px rgba(0,0,0,.12);border-color:var(--ink,#27352b)}
+    .cp104-day b{font-weight:700;font-size:12px;color:#2d3748}
+    .cp104-day-dots{display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:2px}
+    .cp104-day-dot{width:7px;height:7px;border-radius:50%;background:var(--moss,#47593f);flex:0 0 auto;transition:transform .1s}
+    .cp104-day:hover .cp104-day-dot{transform:scale(1.15)}
+    .cp104-day-more{font-size:8.5px;color:#555;font-weight:700;line-height:1;background:#ede6d6;padding:1px 3px;border-radius:3px}
+    .cp104-selected-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:16px 0 10px;padding-top:14px;border-top:1px solid #ece4d4}
+    .cp104-selected-title{font-size:14.5px;font-weight:800;color:var(--ink,#27352b);display:flex;align-items:center;gap:7px}
+    .cp104-event-item{background:#fff;border:1px solid #e8e2d5;border-left:5px solid #47593f;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px;box-shadow:0 2px 6px rgba(0,0,0,.02);transition:transform .15s ease,box-shadow .15s ease}
+    .cp104-event-item:hover{box-shadow:0 4px 10px rgba(0,0,0,.05);transform:translateY(-1px)}
+    .cp104-event-main{flex:1;min-width:0}
+    .cp104-event-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px}
+    .cp104-event-type-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;border:1px solid transparent}
+    .cp104-event-title{font-size:14.5px;font-weight:700;color:#1a261c;cursor:pointer}
+    .cp104-event-title:hover{text-decoration:underline}
+    .cp104-event-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:4px 0 2px}
+    .cp104-event-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#4a5568;background:#f7f4ed;padding:2px 8px;border-radius:6px;border:1px solid #ebe4d6}
+    .cp104-event-pill.location{background:#eef4f0;color:#204b2b;border-color:#d4e5d8}
+    .cp104-event-pill-icon{font-size:12px;line-height:1}
+    .cp104-event-desc{font-size:12px;color:#64748b;margin-top:4px;line-height:1.4}
+    .cp104-event-actions{display:flex;gap:4px;align-items:center;flex-shrink:0}
+    .cp104-btn-icon{border:1px solid #e2dac9;background:#fff;border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;transition:all .15s ease}
+    .cp104-btn-icon:hover{background:#f4eee1;border-color:#bbb}
+    .cp104-btn-icon.del:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+    .cp104-event-empty{text-align:center;padding:22px 14px;background:#faf8f2;border:1px dashed #ded7c7;border-radius:12px;margin-top:6px}
+    .cp104-empty-icon{font-size:28px;margin-bottom:6px}
+    .cp104-empty-title{font-size:13.5px;font-weight:700;color:#3b3a36;margin-bottom:3px}
+    .cp104-empty-sub{font-size:11.5px;color:#78716c;margin-bottom:12px}
+    .cp104-color-palette{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+    .cp104-color-swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #d6cebf;cursor:pointer;position:relative;transition:transform .15s ease,box-shadow .15s ease}
+    .cp104-color-swatch:hover{transform:scale(1.15)}
+    .cp104-color-swatch.selected{transform:scale(1.15);box-shadow:0 0 0 2px var(--ink,#27352b)}
+    .cp104-color-swatch.selected::after{content:'✓';color:#fff;font-size:12px;font-weight:900;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+    .cp104-custom-color-btn{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 8px;border-radius:13px;border:1px solid #d6cebf;background:#fff;font-size:11px;font-weight:600;color:#555;cursor:pointer}
+    .cp104-custom-color-btn input[type=color]{width:16px;height:16px;border:none;padding:0;background:none;cursor:pointer}
+    .cp104-event-preview-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#fdfbf7;border:1px solid #e7dfd0;margin-top:4px;font-size:11.5px;font-weight:600}
+    .cp104-preview-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
     .cp104-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:160;display:none;align-items:center;justify-content:center;padding:12px}.cp104-modal.open{display:flex}.cp104-dialog{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fffdf7;border-radius:12px;border:1px solid #ddd5c5;padding:14px}.cp104-form{display:grid;gap:10px}.cp104-form label{display:grid;gap:4px;font-size:12px;font-weight:700}.cp104-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:7px!important}.cp104-check input{width:auto}.cp104-funding{border:1px dashed #d8d0bf;border-radius:8px;padding:9px;background:#faf7ee}.cp104-funding-search{margin-bottom:7px}.cp104-fund-row{display:grid;grid-template-columns:auto 1fr 120px;gap:7px;align-items:center;padding:5px 0}.cp104-fund-row input[type=number]{width:100%;box-sizing:border-box}.cp104-history{margin-top:8px;border-top:1px solid #eee8dc;padding-top:7px}.cp104-history-item{padding:7px 0;border-bottom:1px solid #eee8dc;font-size:11px}.cp104-help{font-size:11px;color:var(--ink-soft,#667);font-weight:400}
     .cp104-batch{position:fixed;left:10px;right:10px;bottom:74px;z-index:89;display:none;background:#fffdf7;border:1px solid #d8d0bf;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.cp104-batch.open{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.cp104-batch button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:700}
     .cp104-tools{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.cp104-tools button{padding:6px 8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:11px}.cp104-canvas-wrap{overflow:auto;background:#eee9dc;padding:8px;border-radius:8px;text-align:center;position:relative;min-height:180px}.cp104-canvas-wrap canvas{max-width:100%;touch-action:none;display:block;margin:0 auto}.cp104-canvas-wrap canvas+canvas{position:absolute;left:8px;top:8px;margin:0}.cp104-inline-note{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;margin:2px 3px;border:1px solid var(--card-edge,#d8d0bb);border-radius:7px;background:#faf7ef;cursor:pointer;user-select:none}.cp104-inline-note:hover{border-color:var(--moss,#47593f);background:#f4f0e5}.cp104-inline-note small{color:var(--ink-soft,#667);font-size:9px}
-    @media(max-width:650px){.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(0,1fr));max-width:160px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 4px}.cp104-finance-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.cp104-stat{padding:7px 6px;gap:5px}.cp104-stat-ico{width:26px;height:26px;flex-basis:26px;font-size:14px;border-radius:7px}.cp104-stat-txt .cp104-val{font-size:12px}.cp104-stat-txt .cp104-muted{font-size:8.5px}.cp104-day{min-height:48px;padding:4px 3px}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:18px}}
+    @media(max-width:650px){.cp104-head{gap:7px}.cp104-finance-head .cp104-actions{grid-template-columns:repeat(2,minmax(0,1fr));max-width:160px}.cp104-finance-head .cp104-actions .cp104-btn{font-size:10px;padding:5px 4px}.cp104-finance-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.cp104-stat{padding:7px 6px;gap:5px}.cp104-stat-ico{width:26px;height:26px;flex-basis:26px;font-size:14px;border-radius:7px}.cp104-stat-txt .cp104-val{font-size:12px}.cp104-stat-txt .cp104-muted{font-size:8.5px}.cp104-day{min-height:48px;padding:4px 3px}.cp104-nav button{padding:9px 5px}.cp104-title{font-size:18px}.cp104-schedule-toolbar{gap:8px}.cp104-month-title{font-size:16px}.cp104-event-item{padding:8px 10px}}
   `;
   document.head.appendChild(style);
 }
@@ -123,6 +209,7 @@ export const FeaturePackService = {
   savings: [],
   calDate: new Date(),
   selectedDate: today(),
+  eventFilterType: 'all',
   _bound: false,
   _imageEditAttachmentId: null,
   _imageInsertionMarkerId: null,
@@ -181,8 +268,48 @@ export const FeaturePackService = {
       sch.id = 'cp104Schedule';
       sch.className = 'cp104-panel';
       sch.innerHTML = `
-        <div class="cp104-head"><div><div class="cp104-title">📅 Jadwal & Acara</div><div class="cp104-muted">Tambah acara langsung ke catatan kategori Acara.</div></div><div class="cp104-actions"><button type="button" class="cp104-btn" id="cp104Prev">‹ Bulan</button><button type="button" class="cp104-btn" id="cp104Today">Hari ini</button><button type="button" class="cp104-btn" id="cp104Next">Bulan ›</button><button type="button" class="cp104-btn primary" id="cp104AddEvent">+ Acara</button></div></div>
-        <div class="cp104-card" style="max-width:960px;margin:auto"><div class="cp104-head" style="margin:0 0 4px"><b id="cp104Month"></b><span class="cp104-muted" id="cp104SelCount"></span></div><div class="cp104-cal-legend"><span><i class="cp104-legend-dot today"></i>Hari ini</span><span><i class="cp104-legend-dot sel"></i>Terpilih</span><span><i class="cp104-legend-dot ev"></i>Ada acara</span></div><div class="cp104-cal" id="cp104Calendar"></div><div style="height:12px"></div><h3>Acara pada tanggal terpilih</h3><div class="cp104-scroll" id="cp104DayEvents"></div></div>`;
+        <div class="cp104-head cp104-schedule-head">
+          <div>
+            <div class="cp104-title">📅 Jadwal & Acara</div>
+            <div class="cp104-muted">Kelola kegiatan, jadwal rapat, dan janji temu dengan kalender warna terstruktur.</div>
+          </div>
+          <div class="cp104-actions">
+            <button type="button" class="cp104-btn primary" id="cp104AddEvent">＋ Tambah Acara</button>
+          </div>
+        </div>
+        <div class="cp104-card cp104-schedule-card" style="max-width:960px;margin:auto">
+          <div class="cp104-schedule-toolbar">
+            <div class="cp104-month-title-wrap">
+              <span class="cp104-month-title" id="cp104Month"></span>
+              <span class="cp104-month-badge" id="cp104SelCount">0 acara</span>
+            </div>
+            <div class="cp104-cal-nav-group">
+              <button type="button" class="cp104-cal-nav-btn" id="cp104Prev" title="Bulan Sebelumnya">‹</button>
+              <button type="button" class="cp104-cal-nav-btn" id="cp104Today" title="Ke Hari Ini">Hari ini</button>
+              <button type="button" class="cp104-cal-nav-btn" id="cp104Next" title="Bulan Berikutnya">›</button>
+            </div>
+          </div>
+
+          <div class="cp104-type-filters" id="cp104TypeFilters"></div>
+
+          <div class="cp104-cal-legend">
+            <span><i class="cp104-legend-dot today"></i>Hari ini</span>
+            <span><i class="cp104-legend-dot sel"></i>Terpilih</span>
+            <span><i class="cp104-legend-dot ev" style="background:#47593f"></i>Titik warna = Acara terjadwal</span>
+          </div>
+
+          <div class="cp104-cal" id="cp104Calendar"></div>
+
+          <div class="cp104-selected-header">
+            <div class="cp104-selected-title">
+              <span>🗓️</span>
+              <span id="cp104SelectedDateLabel">Acara pada tanggal terpilih</span>
+              <span class="cp104-month-badge" id="cp104DayCountBadge">0</span>
+            </div>
+            <button type="button" class="cp104-btn" id="cp104QuickAddDayBtn" style="font-size:11px;padding:4px 9px">＋ Acara di Tanggal Ini</button>
+          </div>
+          <div class="cp104-scroll" id="cp104DayEvents"></div>
+        </div>`;
       document.body.appendChild(sch);
     }
 
@@ -233,8 +360,48 @@ export const FeaturePackService = {
     if (rem && !document.getElementById('cp104ScheduleExtra')) {
       const row = document.createElement('div');
       row.id = 'cp104ScheduleExtra'; row.style.cssText = 'display:none;margin-top:8px';
-      row.innerHTML = '<label style="font-size:12px;font-weight:600">Lokasi acara</label><input id="cp104EventLocation" class="cp104-input" placeholder="Contoh: Rumah, kantor, sekolah"><input id="cp104EventDate" type="hidden">';
+      row.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px">Jenis Acara</label>
+            <select id="cp104EventType" class="cp104-input">
+              ${EVENT_TYPES.map(t => `<option value="${t.id}">${t.icon} ${t.label}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px">Warna Kalender</label>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input id="cp104EventColor" class="cp104-input" type="color" value="#47593f" style="width:38px;height:34px;padding:2px;cursor:pointer">
+              <span id="cp104EventColorLabel" style="font-size:11px;color:var(--ink-soft,#667)">Warna kartu & titik</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px">📅 Tanggal Acara</label>
+            <input id="cp104EventDate" class="cp104-input" type="date">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px">🕐 Jam Acara</label>
+            <input id="cp104EventTime" class="cp104-input" type="time" value="09:00">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;margin-bottom:3px">
+            <span>📍</span> Lokasi acara
+          </label>
+          <input id="cp104EventLocation" class="cp104-input" placeholder="Contoh: Gedung A, Ruang Rapat 2, atau Google Meet">
+        </div>
+      `;
       rem.parentElement?.appendChild(row);
+      const typeSelect = row.querySelector('#cp104EventType');
+      const colorInput = row.querySelector('#cp104EventColor');
+      if (typeSelect && colorInput) {
+        typeSelect.addEventListener('change', () => {
+          const match = EVENT_TYPES.find(t => t.id === typeSelect.value);
+          if (match && match.defaultColor) colorInput.value = match.defaultColor;
+        });
+      }
     }
     if (document.getElementById('toolbar') && !document.getElementById('cp104ImageBtn')) {
       const button = document.createElement('button');
@@ -269,6 +436,8 @@ export const FeaturePackService = {
     document.getElementById('cp104Next').onclick = () => { this.calDate.setMonth(this.calDate.getMonth() + 1); this.renderCalendar(); };
     document.getElementById('cp104Today').onclick = () => { this.calDate = new Date(); this.selectedDate = today(); this.renderCalendar(); };
     document.getElementById('cp104AddEvent').onclick = () => this.openEventForm(this.selectedDate);
+    const quickAddBtn = document.getElementById('cp104QuickAddDayBtn');
+    if (quickAddBtn) quickAddBtn.onclick = () => this.openEventForm(this.selectedDate);
 
     const syncEditorExtras = () => {
       const category = document.getElementById('categorySelect')?.value;
@@ -623,11 +792,117 @@ export const FeaturePackService = {
   openEventForm(dateValue = today(), existing = null) {
     const note = existing || {};
     const fields = document.getElementById('cp104FormFields');
-    document.getElementById('cp104FormTitle').textContent = existing ? 'Edit Acara' : 'Tambah Acara';
-    fields.innerHTML = `<label>Nama acara<input class="cp104-input" name="title" required value="${esc(note.title || '')}" placeholder="Contoh: Rapat keluarga"></label><div class="cp104-row"><label>Tanggal<input class="cp104-input" name="date" type="date" required value="${esc(note.eventDate || dateValue || today())}"></label><label>Jam<input class="cp104-input" name="time" type="time" value="${esc(note.reminder?.datetime ? String(note.reminder.datetime).slice(11,16) : '09:00')}"></label></div><label>Lokasi<input class="cp104-input" name="location" value="${esc(note.eventLocation || '')}" placeholder="Contoh: Rumah, kantor, sekolah"></label><label>Deskripsi<textarea class="cp104-input" name="body" rows="4" placeholder="Detail acara, peserta, agenda…"></textarea></label><label class="cp104-check"><input type="checkbox" name="reminder" checked> Buat pengingat</label>`;
+    document.getElementById('cp104FormTitle').textContent = existing ? 'Edit Acara' : 'Tambah Acara Baru';
+
+    const curType = note.eventType || 'umum';
+    const curColor = note.eventColor || (EVENT_TYPES.find(t => t.id === curType)?.defaultColor || '#47593f');
+    const curTime = note.reminder?.datetime ? String(note.reminder.datetime).slice(11, 16) : (note.eventTime || '09:00');
+    const curDate = note.eventDate || dateValue || today();
+
+    fields.innerHTML = `
+      <label>Nama Acara
+        <input class="cp104-input" name="title" required value="${esc(note.title || '')}" placeholder="Contoh: Rapat Proyek, Ulang Tahun Sarah, Kuliah...">
+      </label>
+
+      <div class="cp104-row">
+        <label>Jenis Acara
+          <select class="cp104-input" name="type" id="cp104EventTypeSelect">
+            ${EVENT_TYPES.map(t => `<option value="${t.id}" ${t.id === curType ? 'selected' : ''}>${t.icon} ${t.label}</option>`).join('')}
+          </select>
+        </label>
+        <label>Warna di Kalender
+          <input type="hidden" name="color" id="cp104EventColorVal" value="${esc(curColor)}">
+          <div class="cp104-color-palette" id="cp104ColorPalette">
+            ${EVENT_COLOR_PRESETS.map(c => `
+              <button type="button" class="cp104-color-swatch ${c.hex.toLowerCase() === curColor.toLowerCase() ? 'selected' : ''}" 
+                data-color="${c.hex}" title="${c.name}" style="background:${c.hex}"></button>
+            `).join('')}
+            <label class="cp104-custom-color-btn" title="Pilih warna kustom">
+              🎨 Kustom
+              <input type="color" id="cp104CustomColorPicker" value="${esc(curColor)}">
+            </label>
+          </div>
+        </label>
+      </div>
+
+      <div class="cp104-event-preview-bar" id="cp104EventPreviewBar">
+        <span class="cp104-preview-dot" id="cp104PreviewDot" style="background:${esc(curColor)}"></span>
+        <span id="cp104PreviewLabel">Tampilan Kalender: ${EVENT_TYPES.find(t=>t.id===curType)?.icon || '📌'} ${EVENT_TYPES.find(t=>t.id===curType)?.label || 'Umum'}</span>
+      </div>
+
+      <div class="cp104-row">
+        <label>Tanggal Pelaksanaan
+          <input class="cp104-input" name="date" type="date" required value="${esc(curDate)}">
+        </label>
+        <label>Jam Pelaksanaan
+          <input class="cp104-input" name="time" type="time" value="${esc(curTime)}">
+        </label>
+      </div>
+
+      <label>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span>📍</span> Lokasi Acara</span>
+        <input class="cp104-input" name="location" value="${esc(note.eventLocation || '')}" placeholder="Contoh: Gedung A Lt. 2, Cafe Kenangan, atau Google Meet">
+      </label>
+
+      <label>Catatan / Agenda Acara
+        <textarea class="cp104-input" name="body" rows="3" placeholder="Detail acara, peserta, agenda pembahasan, tautan meeting..."></textarea>
+      </label>
+
+      <label class="cp104-check" style="margin-top:4px">
+        <input type="checkbox" name="reminder" ${note.reminder ? 'checked' : (existing ? '' : 'checked')}> 
+        <span>🔔 Pasang pengingat notifikasi alarm</span>
+      </label>
+    `;
+
     const form = document.getElementById('cp104Form');
     form.querySelector('[name="body"]').value = SecurityService.stripHtml(note.bodyHTML || '');
-    form.onsubmit = async (event) => { event.preventDefault(); await this.saveEventForm(existing?.id || null); };
+
+    const colorInput = form.querySelector('#cp104EventColorVal');
+    const previewDot = form.querySelector('#cp104PreviewDot');
+    const customPicker = form.querySelector('#cp104CustomColorPicker');
+    const swatches = form.querySelectorAll('.cp104-color-swatch');
+    const typeSelect = form.querySelector('#cp104EventTypeSelect');
+    const previewLabel = form.querySelector('#cp104PreviewLabel');
+
+    const updateColor = (hex) => {
+      colorInput.value = hex;
+      if (previewDot) previewDot.style.background = hex;
+      if (customPicker) customPicker.value = hex;
+      swatches.forEach(s => {
+        s.classList.toggle('selected', s.dataset.color.toLowerCase() === hex.toLowerCase());
+      });
+    };
+
+    swatches.forEach(swatch => {
+      swatch.onclick = (e) => {
+        e.preventDefault();
+        updateColor(swatch.dataset.color);
+      };
+    });
+
+    if (customPicker) {
+      customPicker.oninput = (e) => {
+        updateColor(e.target.value);
+      };
+    }
+
+    if (typeSelect) {
+      typeSelect.onchange = (e) => {
+        const selected = EVENT_TYPES.find(t => t.id === e.target.value);
+        if (selected) {
+          if (previewLabel) previewLabel.textContent = `Tampilan Kalender: ${selected.icon} ${selected.label}`;
+          if (!existing) {
+            updateColor(selected.defaultColor);
+          }
+        }
+      };
+    }
+
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      await this.saveEventForm(existing?.id || null);
+    };
+
     document.getElementById('cp104FormModal').classList.add('open');
     form.querySelector('[name="title"]').focus();
   },
@@ -639,14 +914,196 @@ export const FeaturePackService = {
     const title = String(data.get('title') || '').trim();
     if (!date || !title) { this.ctx.toast('Nama acara dan tanggal wajib diisi.', 'danger'); return; }
     const time = String(data.get('time') || '09:00');
+    const eventType = String(data.get('type') || 'umum');
+    const eventColor = String(data.get('color') || '#47593f');
+    const location = String(data.get('location') || '').trim();
     const notes = this.ctx.getNotes() || [];
     const existing = existingId ? notes.find((n) => n.id === existingId) : null;
-    const note = existing ? { ...existing, title, bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), category: 'acara', eventDate: date, eventTime: time, eventLocation: String(data.get('location') || '').trim(), reminder: form.querySelector('[name="reminder"]')?.checked ? { datetime: `${date}T${time}`, notified: false } : null, updatedAt: Date.now() } : { id: uid('note'), title, bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')), category: 'acara', eventDate: date, eventTime: time, eventLocation: String(data.get('location') || '').trim(), reminder: form.querySelector('[name="reminder"]')?.checked ? { datetime: `${date}T${time}`, notified: false } : null, finance: null, attachments: [], createdAt: Date.now(), updatedAt: Date.now() };
+    const note = existing ? {
+      ...existing,
+      title,
+      bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')),
+      category: 'acara',
+      eventDate: date,
+      eventTime: time,
+      eventType,
+      eventColor,
+      eventLocation: location,
+      reminder: form.querySelector('[name="reminder"]')?.checked ? { datetime: `${date}T${time}`, notified: false } : null,
+      updatedAt: Date.now()
+    } : {
+      id: uid('note'),
+      title,
+      bodyHTML: SecurityService.escapeHtml(String(data.get('body') || '')),
+      category: 'acara',
+      eventDate: date,
+      eventTime: time,
+      eventType,
+      eventColor,
+      eventLocation: location,
+      reminder: form.querySelector('[name="reminder"]')?.checked ? { datetime: `${date}T${time}`, notified: false } : null,
+      finance: null,
+      attachments: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
     await this.ctx.persistNote(note);
-    this.selectedDate = date; this.calDate = new Date(`${date}T12:00:00`);
+    this.selectedDate = date;
+    this.calDate = new Date(`${date}T12:00:00`);
     document.getElementById('cp104FormModal').classList.remove('open');
     this.switchTab('schedule');
+    this.renderCalendar();
     this.ctx.toast('Acara berhasil disimpan.', 'info');
+  },
+
+  renderCalendar() {
+    const month = document.getElementById('cp104Month');
+    const cal = document.getElementById('cp104Calendar');
+    if (!month || !cal) return;
+    const year = this.calDate.getFullYear();
+    const monthIndex = this.calDate.getMonth();
+    const first = new Date(year, monthIndex, 1).getDay();
+    const days = new Date(year, monthIndex + 1, 0).getDate();
+    month.textContent = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(this.calDate);
+    cal.innerHTML = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((x, i) => `<div class="cp104-cal-head${i === 0 || i === 6 ? ' weekend' : ''}">${x}</div>`).join('');
+    for (let i = 0; i < first; i++) cal.insertAdjacentHTML('beforeend', '<div class="cp104-day muted"></div>');
+    
+    const notes = this.ctx.getNotes() || [];
+    const allEvents = notes.filter((n) => n.category === 'acara');
+    
+    // Render Event Type Filter chips
+    const filtersContainer = document.getElementById('cp104TypeFilters');
+    if (filtersContainer) {
+      const countsByType = { all: allEvents.length };
+      allEvents.forEach(e => {
+        const t = e.eventType || 'umum';
+        countsByType[t] = (countsByType[t] || 0) + 1;
+      });
+
+      const filterList = [
+        { id: 'all', label: 'Semua Acara', icon: '✨', count: countsByType.all || 0 },
+        ...EVENT_TYPES.map(t => ({
+          ...t,
+          count: countsByType[t.id] || 0
+        }))
+      ];
+
+      filtersContainer.innerHTML = filterList.map(f => `
+        <button type="button" class="cp104-type-chip ${this.eventFilterType === f.id ? 'active' : ''}" data-filter="${f.id}">
+          <span>${f.icon}</span>
+          <span>${f.label}</span>
+          <span style="opacity:0.7;font-size:10px">(${f.count})</span>
+        </button>
+      `).join('');
+
+      filtersContainer.querySelectorAll('[data-filter]').forEach(chip => {
+        chip.onclick = () => {
+          this.eventFilterType = chip.dataset.filter;
+          this.renderCalendar();
+        };
+      });
+    }
+
+    const filteredEvents = this.eventFilterType === 'all' 
+      ? allEvents 
+      : allEvents.filter(e => (e.eventType || 'umum') === this.eventFilterType);
+
+    const todayStr = today();
+    let monthEventsCount = 0;
+
+    for (let day = 1; day <= days; day++) {
+      const date = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayEvents = filteredEvents.filter((note) => this.eventDate(note) === date);
+      if (dayEvents.length) monthEventsCount += dayEvents.length;
+
+      const cell = document.createElement('div');
+      cell.className = `cp104-day${date === todayStr ? ' today' : ''}${date === this.selectedDate ? ' sel' : ''}`;
+      
+      const dots = dayEvents.slice(0, 4).map((note) => {
+        const dotColor = note.eventColor || '#47593f';
+        const typeObj = EVENT_TYPES.find(t => t.id === (note.eventType || 'umum'));
+        const tip = `${typeObj?.icon || '📌'} ${note.title || 'Acara'}`;
+        return `<span class="cp104-day-dot" style="background:${esc(dotColor)}" title="${esc(tip)}"></span>`;
+      }).join('');
+
+      const more = dayEvents.length > 4 ? `<span class="cp104-day-more">+${dayEvents.length - 4}</span>` : '';
+      cell.innerHTML = `<b>${day}</b>${dayEvents.length ? `<div class="cp104-day-dots">${dots}${more}</div>` : ''}`;
+      cell.onclick = () => { this.selectedDate = date; this.renderCalendar(); };
+      cal.appendChild(cell);
+    }
+
+    document.getElementById('cp104SelCount').textContent = `${monthEventsCount} acara bulan ini`;
+
+    const selectedEvents = filteredEvents
+      .filter((note) => this.eventDate(note) === this.selectedDate)
+      .sort((a, b) => String(a.eventTime || a.reminder?.datetime?.slice(11, 16) || '99:99').localeCompare(String(b.eventTime || b.reminder?.datetime?.slice(11, 16) || '99:99')));
+
+    const list = document.getElementById('cp104DayEvents');
+    const dayBadge = document.getElementById('cp104DayCountBadge');
+    if (dayBadge) dayBadge.textContent = `${selectedEvents.length} acara`;
+
+    const labelEl = document.getElementById('cp104SelectedDateLabel');
+    if (labelEl) {
+      labelEl.textContent = formatIndonesianDate(this.selectedDate) || this.selectedDate;
+    }
+
+    if (selectedEvents.length) {
+      list.innerHTML = selectedEvents.map((note) => {
+        const time = note.reminder?.datetime ? String(note.reminder.datetime).slice(11, 16) : (note.eventTime || '');
+        const typeObj = EVENT_TYPES.find(t => t.id === (note.eventType || 'umum')) || EVENT_TYPES[0];
+        const color = note.eventColor || typeObj.defaultColor || '#47593f';
+        const descSnippet = SecurityService.stripHtml(note.bodyHTML || '').slice(0, 120);
+
+        return `
+          <div class="cp104-event-item" style="border-left-color:${esc(color)}">
+            <div class="cp104-event-main">
+              <div class="cp104-event-top">
+                <span class="cp104-event-type-tag" style="background:${esc(color)}18;color:${esc(color)};border-color:${esc(color)}40">
+                  <span>${typeObj.icon}</span> ${esc(typeObj.label)}
+                </span>
+                <span class="cp104-event-title" data-event-open="${esc(note.id)}" title="Buka detail catatan">${esc(note.title || 'Tanpa Judul')}</span>
+              </div>
+              <div class="cp104-event-meta">
+                ${time ? `<span class="cp104-event-pill"><span class="cp104-event-pill-icon">🕐</span> ${esc(time)} WIB</span>` : ''}
+                ${note.eventLocation ? `<span class="cp104-event-pill location"><span class="cp104-event-pill-icon">📍</span> ${esc(note.eventLocation)}</span>` : ''}
+                ${note.reminder ? '<span class="cp104-event-pill" style="color:#d97706;background:#fef3c7;border-color:#fde68a"><span class="cp104-event-pill-icon">🔔</span> Pengingat aktif</span>' : ''}
+              </div>
+              ${descSnippet ? `<div class="cp104-event-desc">${esc(descSnippet)}</div>` : ''}
+            </div>
+            <div class="cp104-event-actions">
+              <button type="button" class="cp104-btn-icon" data-event-edit="${esc(note.id)}" title="Edit Acara">✏️</button>
+              <button type="button" class="cp104-btn-icon del" data-event-delete="${esc(note.id)}" title="Hapus Acara">🗑️</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      list.innerHTML = `
+        <div class="cp104-event-empty">
+          <div class="cp104-empty-icon">📅</div>
+          <div class="cp104-empty-title">Tidak ada acara pada tanggal ini</div>
+          <div class="cp104-empty-sub">Jadwalkan rapat, janji, ulang tahun, atau agenda Anda dengan rapi.</div>
+          <button type="button" class="cp104-btn primary" id="cp104EmptyAddBtn" style="font-size:12px;padding:6px 14px">＋ Tambah Acara di Tanggal Ini</button>
+        </div>
+      `;
+      const emptyAddBtn = list.querySelector('#cp104EmptyAddBtn');
+      if (emptyAddBtn) emptyAddBtn.onclick = () => this.openEventForm(this.selectedDate);
+    }
+
+    list.querySelectorAll('[data-event-open]').forEach((node) => {
+      node.onclick = () => this.ctx.openNote(node.dataset.eventOpen);
+    });
+
+    list.querySelectorAll('[data-event-edit]').forEach((node) => {
+      node.onclick = () => {
+        const found = notes.find(n => n.id === node.dataset.eventEdit);
+        if (found) this.openEventForm(this.selectedDate, found);
+      };
+    });
+
+    list.querySelectorAll('[data-event-delete]').forEach((node) => {
+      node.onclick = async () => this.deleteNote(node.dataset.eventDelete);
+    });
   },
 
   addObligation() {

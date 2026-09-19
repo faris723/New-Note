@@ -55,7 +55,7 @@
     .wrap {
       max-width: 760px;
       margin: 0 auto;
-      padding: 20px 16px 140px;
+      padding: 20px 16px calc(180px + env(safe-area-inset-bottom));
     }
 
     header {
@@ -395,6 +395,7 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
+      padding-bottom: 24px;
     }
     .note-card {
       background: var(--card);
@@ -692,17 +693,39 @@
     .overlay {
       position: fixed;
       inset: 0;
-      background: rgba(20,19,15,.55);
-      backdrop-filter: blur(2px);
+      background: rgba(20,19,15,.6);
+      backdrop-filter: blur(3px);
       display: none;
       align-items: flex-end;
       justify-content: center;
-      z-index: 50;
+      z-index: 200;
       padding: max(8px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom));
       overflow: hidden;
     }
     .overlay.open { display: flex; }
-    #exportOverlay.open, #importOverlay.open { z-index: 210; align-items: center; padding: max(8px,env(safe-area-inset-top)) 10px max(90px,calc(12px + env(safe-area-inset-bottom))); overflow-y:auto; }
+    #exportOverlay.open, #importOverlay.open { z-index: 220; align-items: center; padding: max(8px,env(safe-area-inset-top)) 10px max(90px,calc(12px + env(safe-area-inset-bottom))); overflow-y:auto; }
+    #reminderAlertOverlay, #confirmOverlay {
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 16px !important;
+      z-index: 300 !important;
+    }
+    #reminderAlertOverlay .confirm-box, #confirmOverlay .confirm-box {
+      border-radius: 12px !important;
+      box-shadow: 0 20px 48px rgba(0,0,0,0.38) !important;
+      border-top: none !important;
+      border-left: 5px solid var(--gold) !important;
+      width: calc(100% - 24px) !important;
+      max-width: 440px !important;
+      margin: auto !important;
+      box-sizing: border-box !important;
+    }
+    #reminderAlertOverlay .confirm-actions, #confirmOverlay .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 8px;
+    }
     @media (min-width: 640px) {
       .overlay {
         align-items: center;
@@ -760,18 +783,20 @@
       background: var(--paper);
     }
 
-    /* Note Editor Modal */
+    /* Note Editor Modal (Modern Developer-Grade Clean UI) */
     .modal {
       width: 100%;
-      max-width: 680px;
-      padding: 18px 20px;
-      border-top: 4px solid var(--moss);
+      max-width: 780px;
+      padding: 20px 24px;
+      border-radius: 12px;
+      border: 1px solid var(--card-edge);
+      box-shadow: 0 20px 45px -10px rgba(28, 25, 23, 0.22), 0 0 1px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
       gap: 12px;
       max-height: 92vh;
       overflow-y: auto;
-      background: var(--card);
+      background: #ffffff;
     }
     @media (min-width: 640px) {
       .modal {
@@ -780,101 +805,485 @@
       }
     }
 
-    .modal input#noteTitle {
-      width: 100%;
-      font-family: Georgia, 'Times New Roman', serif;
-      font-weight: 600;
-      font-size: 19px;
-      padding: 10px 14px;
-      border: 1px solid var(--card-edge);
-      background: #fff;
-      color: var(--ink);
-      outline: none;
-      border-radius: 2px;
-    }
-    .modal input#noteTitle:focus { border-color: var(--moss); }
-
-    .toolbar {
+    /* Editor Header */
+    .editor-header {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #ede8df;
       flex-wrap: wrap;
-      gap: 4px;
-      background: #fff;
-      border: 1px solid var(--card-edge);
-      border-bottom: none;
-      padding: 6px;
-      border-top-left-radius: 2px;
-      border-top-right-radius: 2px;
     }
-    .toolbar button {
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 12px;
-      background: none;
-      border: 1px solid transparent;
-      padding: 5px 9px;
-      cursor: pointer;
-      color: var(--ink);
-      border-radius: 2px;
-    }
-    .toolbar button:hover {
-      border-color: var(--card-edge);
-      background: var(--paper);
-    }
-    .toolbar select {
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 11px;
-      border: 1px solid var(--card-edge);
-      background: #fff;
-      padding: 4px;
-      border-radius: 2px;
-    }
-
-    #noteBody {
-      min-height: 180px;
-      max-height: 340px;
-      overflow-y: auto;
-      border: 1px solid var(--card-edge);
-      padding: 14px;
-      background: #fff;
-      font-size: 14.5px;
-      line-height: 1.6;
-      outline: none;
-      border-bottom-left-radius: 2px;
-      border-bottom-right-radius: 2px;
-    }
-    #noteBody:focus { border-color: var(--moss); }
-    #noteBody .cp104-inline-note { display:inline-flex; align-items:center; gap:5px; padding:2px 7px; margin:1px 2px; border:1px solid var(--card-edge); border-radius:6px; background:#faf7ef; cursor:pointer; user-select:none; }
-    #noteBody .cp104-inline-note:hover { border-color:var(--moss); background:#f3efe5; }
-    #noteBody .cp104-inline-note small { font-size:9px; color:var(--ink-soft); }
-    #noteBody table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 8px 0;
-    }
-    #noteBody table td {
-      border: 1px solid var(--card-edge);
-      padding: 6px 8px;
-    }
-
-    .category-row {
+    .editor-header-left {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
-    .category-row select {
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 13px;
-      padding: 8px 10px;
-      border: 1px solid var(--card-edge);
-      background: #fff;
-      flex: 1;
-      min-width: 160px;
-      border-radius: 2px;
+    .editor-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .category-row .hint {
+    .editor-badge {
       font-size: 11px;
+      font-weight: 700;
+      color: var(--moss);
+      background: #f1ede4;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pin-editor-pill {
+      font-size: 11.5px;
+      border: 1px solid #dcd5c7;
+      background: #faf8f5;
+      color: var(--ink);
+      padding: 3px 10px;
+      border-radius: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .pin-editor-pill:hover {
+      background: #f0ebe0;
+      border-color: var(--moss);
+    }
+    .pin-editor-pill.pinned {
+      background: var(--moss);
+      color: #fff;
+      border-color: var(--moss);
+      box-shadow: 0 2px 5px rgba(71,89,63,0.3);
+    }
+    .editor-sync-badge {
+      font-size: 11px;
+      color: #78716c;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .editor-mode-toggle-btn {
+      background: #f5f2eb;
+      border: 1px solid #dfd8cb;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 6px;
+      color: var(--ink);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .editor-mode-toggle-btn:hover, .editor-mode-toggle-btn.active {
+      background: #e8e2d4;
+      border-color: var(--moss);
+      color: var(--moss);
+    }
+    .editor-ghost-btn {
+      background: none;
+      border: 1px solid transparent;
+      padding: 4px 7px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
       color: var(--ink-soft);
-      line-height: 1.4;
+      transition: all 0.12s;
+    }
+    .editor-ghost-btn:hover {
+      background: #f2ede4;
+      color: var(--ink);
+    }
+
+    /* Note Title (Clean borderless) */
+    .note-title-wrap {
+      position: relative;
+      margin-top: 2px;
+    }
+    .modal input#noteTitle {
+      width: 100%;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-weight: 700;
+      font-size: 21px;
+      padding: 6px 2px 8px 2px;
+      border: none;
+      border-bottom: 2px solid #e7e2d7;
+      background: transparent;
+      color: var(--ink);
+      outline: none;
+      border-radius: 0;
+      transition: border-color 0.15s;
+    }
+    .modal input#noteTitle:focus {
+      border-bottom-color: var(--moss);
+    }
+    .modal input#noteTitle::placeholder {
+      color: #a8a29e;
+      font-weight: 500;
+    }
+
+    /* Interactive Developer Toolbar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      background: #fbf9f5;
+      border: 1px solid #e4decb;
+      border-bottom: none;
+      padding: 5px 8px;
+      border-radius: 8px 8px 0 0;
+    }
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .toolbar-divider {
+      width: 1px;
+      height: 18px;
+      background: #ded7c8;
+      margin: 0 4px;
+    }
+    .toolbar button, .toolbar .toolbar-btn, button#cp104ImageBtn {
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid transparent;
+      padding: 4px 7px;
+      cursor: pointer;
+      color: var(--ink);
+      border-radius: 5px;
+      transition: all 0.12s;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      min-height: 28px;
+    }
+    .toolbar button:hover, .toolbar .toolbar-btn:hover, button#cp104ImageBtn:hover {
+      background: #eee8dc;
+      border-color: #dfd8cb;
+    }
+    .toolbar button:active, .toolbar .toolbar-btn:active, button#cp104ImageBtn:active {
+      transform: scale(0.96);
+    }
+    .toolbar select {
+      font-family: inherit;
+      font-size: 11.5px;
+      border: 1px solid #dfd8cb;
+      background: #fff;
+      padding: 3px 6px;
+      border-radius: 5px;
+      color: var(--ink);
+      height: 28px;
+    }
+
+    /* Editor Canvas & Body */
+    .editor-canvas-container {
+      position: relative;
+      width: 100%;
+    }
+    #noteBody {
+      min-height: 220px;
+      max-height: 380px;
+      overflow-y: auto;
+      border: 1px solid #e4decb;
+      padding: 14px 16px;
+      background: #ffffff;
+      font-size: 14.5px;
+      line-height: 1.65;
+      outline: none;
+      border-radius: 0 0 8px 8px;
+      color: var(--ink);
+      tab-size: 2;
+    }
+    #noteBody:focus {
+      border-color: var(--moss);
+      box-shadow: 0 0 0 1px var(--moss);
+    }
+    #noteBody:empty:before {
+      content: attr(placeholder);
+      color: #a8a29e;
+      pointer-events: none;
+    }
+    .note-markdown-area {
+      width: 100%;
+      min-height: 220px;
+      max-height: 380px;
+      padding: 14px 16px;
+      background: #191f1c;
+      color: #f1f5f9;
+      font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+      border: 1px solid #2d3832;
+      border-radius: 0 0 8px 8px;
+      outline: none;
+      resize: vertical;
+      tab-size: 2;
+    }
+
+    /* Code styling in Note Body */
+    #noteBody code, .cp-inline-code {
+      font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      background: #f4efe4;
+      color: #a3402f;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #e3dccf;
+    }
+    #noteBody pre, .cp-code-block {
+      background: #191f1c;
+      color: #e2e8f0;
+      border: 1px solid #2e3a33;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      position: relative;
+    }
+    .cp-code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #2e3a33;
+      font-size: 11px;
+      color: #94a3b8;
+      font-family: -apple-system, sans-serif;
+      user-select: none;
+    }
+    .cp-code-copy-btn {
+      background: #2b3530;
+      border: 1px solid #3c4943;
+      color: #cbd5e1;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      cursor: pointer;
+    }
+    .cp-code-copy-btn:hover {
+      background: #394640;
+      color: #fff;
+    }
+
+    /* Task list items */
+    .cp-task-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 4px 0;
+    }
+    .cp-task-check {
+      margin-top: 4px;
+      width: 15px;
+      height: 15px;
+      accent-color: var(--moss);
+      cursor: pointer;
+    }
+    .cp-task-item.done span, .cp-task-item input:checked + span {
+      text-decoration: line-through;
+      color: var(--ink-soft);
+      opacity: 0.75;
+    }
+
+    /* Inline attachments and tables */
+    #noteBody .cp104-inline-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      margin: 1px 2px;
+      border: 1px solid var(--card-edge);
+      border-radius: 6px;
+      background: #faf7ef;
+      cursor: pointer;
+      user-select: none;
+    }
+    #noteBody .cp104-inline-note:hover {
+      border-color: var(--moss);
+      background: #f3efe5;
+    }
+    #noteBody .cp104-inline-note small {
+      font-size: 9px;
+      color: var(--ink-soft);
+    }
+    #noteBody table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 10px 0;
+      border: 1px solid #ded7c9;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #noteBody table th {
+      background: #f2ece0;
+      font-weight: 600;
+      padding: 7px 10px;
+      border: 1px solid #ded7c9;
+      text-align: left;
+    }
+    #noteBody table td {
+      border: 1px solid #ded7c9;
+      padding: 6px 10px;
+    }
+    #noteBody blockquote {
+      border-left: 3px solid var(--moss);
+      margin: 8px 0;
+      padding: 4px 12px;
+      color: #57534e;
+      background: #faf8f3;
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* Engineer stats bar */
+    .editor-stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #faf8f4;
+      border: 1px solid #e4decb;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      margin-top: -4px;
+    }
+    .editor-stats-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .editor-stats-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-dot {
+      color: #d6cfbf;
+    }
+    .stats-action-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      font-size: 11.5px;
+      color: var(--ink);
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .stats-action-btn:hover {
+      background: #eee8dc;
+      border-color: #ded7c9;
+    }
+
+    /* Metadata and drawer pills */
+    .editor-meta-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-top: 4px;
+    }
+    .category-picker-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .meta-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+    .category-picker-wrap select {
+      font-family: inherit;
+      font-size: 12.5px;
+      padding: 5px 9px;
+      border: 1px solid #dcd5c7;
+      background: #fff;
+      border-radius: 6px;
+      color: var(--ink);
+    }
+    .editor-drawers-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .drawer-pill-btn {
+      background: #f7f4ed;
+      border: 1px solid #ded7c9;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--ink);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .drawer-pill-btn:hover, .drawer-pill-btn.active {
+      background: #ede6d7;
+      border-color: var(--moss);
+      color: var(--moss);
+      font-weight: 600;
+    }
+    .drawer-status-dot {
+      color: var(--moss);
+      font-size: 9px;
+    }
+    .drawer-count-badge {
+      background: #e2dcce;
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+    }
+    .drawer-panel {
+      background: #faf8f5;
+      border: 1px solid #e4decb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 2px;
+      animation: fadeIn 0.15s ease-out;
+    }
+
+    /* Shortcut Modal Kbd */
+    .shortcut-kbd {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      background: #f3efe5;
+      border: 1px solid #ded7c9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #44403c;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+    }
+    .btn-kbd {
+      font-size: 10px;
+      background: rgba(255,255,255,0.2);
+      padding: 2px 5px;
+      border-radius: 4px;
+      margin-left: 4px;
+      opacity: 0.85;
+      font-family: monospace;
     }
 
     .finance-row {
@@ -2035,6 +2444,7 @@
         <button class="icon-btn" id="installAppBtn" title="Periksa pembaruan aplikasi">🔎 Periksa Pembaruan</button>
         <button class="icon-btn" id="updateBadgeBtn" title="Ada pembaruan aplikasi" style="display:none;">⬆️ Update</button>
         <button class="icon-btn" id="financeBtn">💰 Keuangan</button>
+        <button class="icon-btn" id="scheduleBtn">📅 Jadwal</button>
         <button class="icon-btn" id="manageCatBtn">🏷️ Kategori</button>
         <button class="icon-btn" id="filterToggleBtn">🔍 Filter</button>
         <button class="icon-btn" id="importMainBtn" title="Impor cadangan JSON">📥 Impor</button>
@@ -2132,129 +2542,244 @@
   <button class="fab-chat" id="fabChat" title="Tanya Jawab Catatan (Asisten Lokal)">💬</button>
   <button class="fab" id="fabAdd" title="Tulis catatan baru">+</button>
 
-  <!-- Note Editor Modal -->
+  <!-- Note Editor Modal (Engineer-Friendly & Clean Minimalist UI) -->
   <div class="overlay" id="overlay">
-    <div class="modal">
-      <div class="flex items-center justify-between pb-1 border-b border-[var(--card-edge)]">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-semibold text-[var(--ink-soft)] uppercase tracking-wider" id="editorModeLabel">Tulis Catatan</span>
-          <button type="button" id="pinEditorBtn" title="Sematkan catatan ke posisi paling atas">📍 Sematkan</button>
+    <div class="modal" id="noteModal">
+      <!-- Top Header Bar -->
+      <div class="editor-header">
+        <div class="editor-header-left">
+          <span class="editor-badge" id="editorModeLabel">Tulis Catatan</span>
+          <button type="button" id="pinEditorBtn" class="pin-editor-pill" title="Sematkan catatan ke posisi paling atas">📍 Sematkan</button>
+          <span class="editor-sync-badge" title="Tersimpan otomatis di IndexedDB lokal">● Offline-First</span>
         </div>
-        <button type="button" class="modal-close-btn" id="closeEditorBtn" title="Tutup">✕</button>
+        <div class="editor-header-right">
+          <button type="button" id="toggleMarkdownBtn" class="editor-mode-toggle-btn" title="Beralih antara Mode Visual & Markdown"><b>&lt;/&gt;</b> <span id="modeToggleLabel">Markdown</span></button>
+          <button type="button" id="shortcutHelpBtn" class="editor-ghost-btn" title="Pintasan Keyboard Developer (Ctrl+/)">⌨️</button>
+          <button type="button" class="modal-close-btn" id="closeEditorBtn" title="Tutup (Esc)">✕</button>
+        </div>
       </div>
 
-      <input type="text" id="noteTitle" placeholder="Judul catatan…" autocomplete="off">
+      <!-- Title Input (Borderless, clean modern typography) -->
+      <div class="note-title-wrap">
+        <input type="text" id="noteTitle" placeholder="Judul catatan, issue, atau dokumentasi…" autocomplete="off" spellcheck="false">
+      </div>
 
-      <!-- Rich-text Toolbar -->
+      <!-- Developer Interactive Toolbar -->
       <div class="toolbar" id="toolbar">
-        <button type="button" data-cmd="bold" title="Tebal (Ctrl+B)"><b>B</b></button>
-        <button type="button" data-cmd="italic" title="Miring (Ctrl+I)"><i>I</i></button>
-        <button type="button" data-cmd="underline" title="Garis Bawah (Ctrl+U)"><u>U</u></button>
-        <button type="button" data-cmd="strikeThrough" title="Coretan"><s>S</s></button>
-        <button type="button" data-cmd="insertUnorderedList" title="Daftar Poin">• List</button>
-        <button type="button" data-cmd="insertOrderedList" title="Daftar Nomor">1. List</button>
-        <button type="button" id="insertTableBtn" title="Sisipkan Tabel">Tabel</button>
-        <button type="button" id="openSketchBtn" title="Gambar Coretan / Sketsa Langsung">✏️ Sketsa</button>
-        <button type="button" id="insertFileBtn" title="Sisipkan berkas ke posisi kursor">📎 File</button>
-        <select id="fontSizeSelect" title="Ukuran Huruf">
-          <option value="2">Kecil</option>
-          <option value="3" selected>Normal</option>
-          <option value="5">Besar</option>
-          <option value="7">Sangat besar</option>
-        </select>
-        <select id="fontFamilySelect" title="Jenis Huruf">
-          <option value="'IBM Plex Mono', monospace">Mono</option>
-          <option value="'Source Serif 4', serif">Serif</option>
-          <option value="'IBM Plex Sans', sans-serif">Sans</option>
-        </select>
-      </div>
-
-      <!-- Note Body Editable Area -->
-      <div id="noteBody" contenteditable="true"></div>
-
-      <!-- Category selection & automatic detection -->
-      <div class="category-row">
-        <select id="categorySelect"></select>
-        <span class="hint" id="categoryHint">Kategori terdeteksi otomatis dari isi catatan — bisa diubah manual.</span>
-      </div>
-
-      <!-- Reminder Setting Row -->
-      <div class="reminder-row" id="reminderRow">
-        <div class="reminder-left">
-          <span class="reminder-icon">🔔</span>
-          <label for="noteReminderInput">Pengingat (Alarm):</label>
+        <div class="toolbar-group">
+          <button type="button" data-cmd="bold" title="Tebal (Ctrl+B)"><b>B</b></button>
+          <button type="button" data-cmd="italic" title="Miring (Ctrl+I)"><i>I</i></button>
+          <button type="button" data-cmd="underline" title="Garis Bawah (Ctrl+U)"><u>U</u></button>
+          <button type="button" data-cmd="strikeThrough" title="Coretan (Ctrl+Shift+X)"><s>S</s></button>
         </div>
-        <div class="reminder-inputs">
-          <input type="datetime-local" id="noteReminderInput" title="Pilih tanggal & waktu pengingat">
-          <button type="button" class="btn-subtle" id="clearReminderBtn" title="Hapus pengingat">✕ Hapus</button>
-          <button type="button" class="btn-subtle" id="notifyPermBtn" style="display:none;" title="Aktifkan notifikasi peramban">Izinkan Notifikasi</button>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <button type="button" id="headingH1Btn" title="Heading 1 (H1)">H1</button>
+          <button type="button" id="headingH2Btn" title="Heading 2 (H2)">H2</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <button type="button" data-cmd="insertUnorderedList" title="Daftar Poin (Bullet List)">• List</button>
+          <button type="button" data-cmd="insertOrderedList" title="Daftar Nomor (Numbered List)">1. List</button>
+          <button type="button" id="insertTaskBtn" title="Checklist Task Interaktif (Ctrl+Shift+L)">☑ Task</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <button type="button" id="insertInlineCodeBtn" title="Kode Segaris (Ctrl+E)"><code>&lt;/&gt;</code></button>
+          <button type="button" id="insertCodeBlockBtn" title="Blok Kode Lengkap (Ctrl+Shift+C)"><code>```{ }</code></button>
+          <button type="button" id="insertTableBtn" title="Sisipkan Tabel">📊 Tabel</button>
+          <button type="button" id="insertQuoteBtn" title="Kutipan (Blockquote)">❝ Quote</button>
+          <button type="button" id="insertLinkBtn" title="Sisipkan Tautan">🔗 Link</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <button type="button" id="openSketchBtn" title="Gambar Coretan / Sketsa Langsung">✏️ Sketsa</button>
+          <button type="button" id="insertFileBtn" title="Sisipkan berkas ke posisi kursor">📎 File</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group toolbar-group-selects">
+          <select id="fontFamilySelect" title="Jenis Huruf">
+            <option value="'IBM Plex Mono', 'JetBrains Mono', monospace" selected>Mono (Dev)</option>
+            <option value="'IBM Plex Sans', -apple-system, sans-serif">Sans (Modern)</option>
+            <option value="'Source Serif 4', serif">Serif (Doc)</option>
+          </select>
+          <select id="fontSizeSelect" title="Ukuran Huruf">
+            <option value="2">Kecil</option>
+            <option value="3" selected>Normal</option>
+            <option value="5">Besar</option>
+            <option value="7">Ekstra</option>
+          </select>
         </div>
       </div>
 
-      <!-- Financial transactions input -->
-      <div class="finance-row" id="financeRow" style="display:none;">
-        <select id="financeType">
-          <option value="expense">Pengeluaran</option>
-          <option value="income">Pemasukan</option>
-          <option value="debt">Hutang</option>
-        </select>
-        <input type="number" id="financeAmount" placeholder="Jumlah (Rp)" min="0" step="1">
+      <!-- Note Body Editable Area & Raw Markdown Area -->
+      <div class="editor-canvas-container">
+        <div id="noteBody" contenteditable="true" spellcheck="false" placeholder="Ketik catatan, paste snippet kode, atau klik ☑ Task untuk membuat checklist..."></div>
+        <textarea id="noteMarkdownArea" class="note-markdown-area" style="display:none;" spellcheck="false" placeholder="Tulis catatan format Markdown di sini..."></textarea>
       </div>
 
-      <!-- Debt details row -->
-      <div class="finance-debt-row" id="financeDebtRow" style="display:none;">
-        <div class="finance-row">
-          <input type="text" id="debtTo" placeholder="Hutang kepada siapa…">
-          <input type="text" id="debtPurpose" placeholder="Untuk apa…">
+      <!-- Engineer Live Stats Bar -->
+      <div class="editor-stats-bar">
+        <div class="editor-stats-left" id="editorWordStats">
+          <span id="statWordCount"><b>0</b> kata</span>
+          <span class="stat-dot">·</span>
+          <span id="statCharCount"><b>0</b> karakter</span>
+          <span class="stat-dot">·</span>
+          <span id="statLineCount"><b>0</b> baris</span>
+          <span class="stat-dot">·</span>
+          <span id="editorReadTime">~0 mnt</span>
         </div>
-        <label class="debt-paid-check"><input type="checkbox" id="debtPaid"> Sudah lunas</label>
+        <div class="editor-stats-right">
+          <button type="button" id="copyMarkdownBtn" class="stats-action-btn" title="Salin seluruh catatan sebagai Markdown ke clipboard">📋 Salin Markdown</button>
+          <button type="button" id="cleanFormatBtn" class="stats-action-btn" title="Bersihkan spasi ganda dan format kosong">🧹 Rapikan</button>
+        </div>
       </div>
 
-      <!-- Attachments & Voice Section -->
-      <div class="attach-section">
-        <!-- Voice section -->
-        <div class="voice-section">
-          <div class="voice-mode-row">
-            <label><input type="radio" name="voiceMode" id="voiceModeAudio" value="audio" checked> 🎙️ Rekaman suara (disimpan sebagai lampiran & diputar)</label>
-            <label><input type="radio" name="voiceMode" id="voiceModeText" value="text"> 📝 Ucapan → teks (langsung ditulis ke catatan)</label>
+      <!-- Category selection & Drawer Pills Navigation -->
+      <div class="editor-meta-bar">
+        <div class="category-picker-wrap">
+          <span class="meta-label">Kategori:</span>
+          <select id="categorySelect"></select>
+        </div>
+        <div class="editor-drawers-nav">
+          <button type="button" id="drawerReminderBtn" class="drawer-pill-btn" title="Buka pengaturan alarm / pengingat">⏰ Pengingat <span class="drawer-status-dot" id="reminderDot" style="display:none;">●</span></button>
+          <button type="button" id="drawerFinanceBtn" class="drawer-pill-btn" title="Buka pencatatan transaksi keuangan">💰 Keuangan <span class="drawer-status-dot" id="financeDot" style="display:none;">●</span></button>
+          <button type="button" id="drawerAttachBtn" class="drawer-pill-btn" title="Buka panel lampiran & perekam suara">📎 Lampiran &amp; Suara <span class="drawer-count-badge" id="attachCountBadge">0</span></button>
+        </div>
+      </div>
+      <div class="hint" id="categoryHint" style="font-size:11px;color:var(--ink-soft);margin-top:2px;"></div>
+
+      <!-- Reminder Drawer (Collapsible) -->
+      <div class="drawer-panel" id="drawerReminderPanel" style="display:none;">
+        <div class="reminder-row" id="reminderRow">
+          <div class="reminder-left">
+            <span class="reminder-icon">🔔</span>
+            <label for="noteReminderInput">Pengingat (Alarm):</label>
           </div>
-          <div class="voice-controls">
-            <button type="button" class="icon-btn" id="voiceRecordBtn">🎙️ Mulai Rekam</button>
-            <span class="rec-indicator" id="recIndicator" style="display:none;">
-              <span class="rec-dot"></span>
-              <span id="recTimer">00:00</span>
-            </span>
+          <div class="reminder-inputs">
+            <input type="datetime-local" id="noteReminderInput" title="Pilih tanggal & waktu pengingat">
+            <button type="button" class="btn-subtle" id="clearReminderBtn" title="Hapus pengingat">✕ Hapus</button>
+            <button type="button" class="btn-subtle" id="notifyPermBtn" style="display:none;" title="Aktifkan notifikasi peramban">Izinkan Notifikasi</button>
           </div>
-          <div class="voice-status" id="voiceStatus"></div>
+        </div>
+      </div>
+
+      <!-- Financial Drawer (Collapsible) -->
+      <div class="drawer-panel" id="drawerFinancePanel" style="display:none;">
+        <div class="finance-row" id="financeRow" style="display:none;">
+          <select id="financeType">
+            <option value="expense">Pengeluaran</option>
+            <option value="income">Pemasukan</option>
+            <option value="debt">Hutang</option>
+          </select>
+          <input type="number" id="financeAmount" placeholder="Jumlah (Rp)" min="0" step="1">
         </div>
 
-        <!-- Attachment List -->
-        <div class="attach-list" id="attachList"></div>
-
-        <!-- Drag & Drop / File Input -->
-        <div class="drop-zone" id="dropZone">
-          <div class="drop-zone-text">
-            📎 <b>Pilih atau seret berkas ke sini</b> untuk melampirkan.<br>
-            <span style="font-size:10.5px; color:var(--ink-soft);">Foto otomatis dikompresi agar hemat memori lokal. Maks 25MB per berkas.</span>
+        <div class="finance-debt-row" id="financeDebtRow" style="display:none;">
+          <div class="finance-row">
+            <input type="text" id="debtTo" placeholder="Hutang kepada siapa…">
+            <input type="text" id="debtPurpose" placeholder="Untuk apa…">
           </div>
-          <input type="file" id="fileInput" multiple style="display:none;">
-          <input type="file" id="inlineFileInput" multiple class="cp104-file-picker-input" aria-hidden="true" tabindex="-1">
+          <label class="debt-paid-check"><input type="checkbox" id="debtPaid"> Sudah lunas</label>
         </div>
+      </div>
 
-        <div class="attach-status" id="attachStatus"></div>
+      <!-- Attachments & Voice Drawer (Collapsible) -->
+      <div class="drawer-panel" id="drawerAttachPanel" style="display:none;">
+        <div class="attach-section">
+          <div class="voice-section">
+            <div class="voice-mode-row">
+              <label><input type="radio" name="voiceMode" id="voiceModeAudio" value="audio" checked> 🎙️ Rekaman suara (disimpan sebagai lampiran & diputar)</label>
+              <label><input type="radio" name="voiceMode" id="voiceModeText" value="text"> 📝 Ucapan → teks (langsung ditulis ke catatan)</label>
+            </div>
+            <div class="voice-controls">
+              <button type="button" class="icon-btn" id="voiceRecordBtn">🎙️ Mulai Rekam</button>
+              <span class="rec-indicator" id="recIndicator" style="display:none;">
+                <span class="rec-dot"></span>
+                <span id="recTimer">00:00</span>
+              </span>
+            </div>
+            <div class="voice-status" id="voiceStatus"></div>
+          </div>
+
+          <div class="attach-list" id="attachList"></div>
+
+          <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-text">
+              📎 <b>Pilih atau seret berkas ke sini</b> untuk melampirkan.<br>
+              <span style="font-size:10.5px; color:var(--ink-soft);">Foto otomatis dikompresi agar hemat memori lokal. Maks 25MB per berkas.</span>
+            </div>
+            <input type="file" id="fileInput" multiple style="display:none;">
+            <input type="file" id="inlineFileInput" multiple class="cp104-file-picker-input" aria-hidden="true" tabindex="-1">
+          </div>
+
+          <div class="attach-status" id="attachStatus"></div>
+        </div>
       </div>
 
       <div class="status-msg" id="statusMsg"></div>
 
+      <!-- Bottom Action Bar -->
       <div class="modal-actions">
         <div class="left-actions">
-          <button class="btn btn-save" id="saveBtn">Simpan</button>
+          <button class="btn btn-save" id="saveBtn"><span class="btn-icon">💾</span> Simpan <span class="btn-kbd">Ctrl+Enter</span></button>
           <button class="btn btn-cancel" id="cancelBtn">Batal</button>
-          <button class="btn btn-cancel" id="exportNoteBtn">⭳ PDF</button>
+          <button class="btn btn-cancel" id="exportNoteBtn">📄 Unduh PDF</button>
         </div>
-        <button class="btn btn-delete" id="deleteBtn" style="display:none;">Hapus</button>
+        <button class="btn btn-delete" id="deleteBtn" style="display:none;">🗑️ Hapus</button>
       </div>
-      <div class="modal-hint">Tip: Ctrl/Cmd + Enter untuk simpan cepat. Catatan disimpan secara lokal di peramban ini.</div>
+      <div class="modal-hint">Tip: <b>Ctrl + Enter</b> simpan cepat · <b>Tab</b> untuk indentasi kode · <b>Ctrl + E</b> kode inline</div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Cheat-Sheet Modal -->
+  <div class="overlay" id="shortcutOverlay" style="display:none;z-index:9999;">
+    <div class="modal" style="max-width:480px;border-radius:10px;padding:18px;">
+      <div class="flex items-center justify-between pb-2 border-b border-[var(--card-edge)]">
+        <div class="text-sm font-bold text-[var(--ink)] flex items-center gap-2">
+          <span>⌨️</span> Pintasan Keyboard Developer
+        </div>
+        <button type="button" class="modal-close-btn" id="closeShortcutBtn">✕</button>
+      </div>
+      <div class="shortcut-list py-2 text-xs flex flex-col gap-2">
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Simpan Catatan</span>
+          <kbd class="shortcut-kbd">Ctrl / Cmd + Enter</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Tebal (Bold)</span>
+          <kbd class="shortcut-kbd">Ctrl / Cmd + B</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Miring (Italic)</span>
+          <kbd class="shortcut-kbd">Ctrl / Cmd + I</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Kode Inline &lt;code&gt;</span>
+          <kbd class="shortcut-kbd">Ctrl / Cmd + E</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Blok Kode ```</span>
+          <kbd class="shortcut-kbd">Ctrl + Shift + C</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Daftar Task [ ]</span>
+          <kbd class="shortcut-kbd">Ctrl + Shift + L</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Indentasi Kode (2 spasi)</span>
+          <kbd class="shortcut-kbd">Tab</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1 border-b border-[var(--card-edge)]/50">
+          <span class="text-[var(--ink)] font-medium">Beralih Mode Markdown</span>
+          <kbd class="shortcut-kbd">Ctrl / Cmd + M</kbd>
+        </div>
+        <div class="flex justify-between items-center py-1">
+          <span class="text-[var(--ink)] font-medium">Tutup Editor</span>
+          <kbd class="shortcut-kbd">Escape</kbd>
+        </div>
+      </div>
+      <button type="button" class="btn btn-save w-full mt-2" id="shortcutOkBtn">Mengerti</button>
     </div>
   </div>
 

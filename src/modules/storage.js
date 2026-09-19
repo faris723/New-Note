@@ -147,6 +147,8 @@ export async function syncIndividualNoteFiles(notes = [], customCategories = [])
         eventDate: note.eventDate || '',
         eventTime: note.eventTime || '',
         eventLocation: note.eventLocation || '',
+        eventType: note.eventType || 'umum',
+        eventColor: note.eventColor || '#47593f',
         attachments: Array.isArray(note.attachments) ? note.attachments.map(a => ({
           id: a.id, name: a.name, mime: a.mime, ext: a.ext, size: a.size, kind: a.kind,
           filePath: a.filePath || null, fileUri: a.fileUri || null, webviewSrc: a.webviewSrc || null,
