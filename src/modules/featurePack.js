@@ -1156,34 +1156,6 @@ export const FeaturePackService = {
     return localDateFromTimestamp(note.updatedAt || note.createdAt || Date.now());
   },
 
-  renderCalendar() {
-    const month = document.getElementById('cp104Month'); const cal = document.getElementById('cp104Calendar');
-    if (!month || !cal) return;
-    const year = this.calDate.getFullYear(); const monthIndex = this.calDate.getMonth(); const first = new Date(year, monthIndex, 1).getDay(); const days = new Date(year, monthIndex + 1, 0).getDate();
-    month.textContent = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(this.calDate);
-    cal.innerHTML = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((x, i) => `<div class="cp104-cal-head${i === 0 || i === 6 ? ' weekend' : ''}">${x}</div>`).join('');
-    for (let i = 0; i < first; i++) cal.insertAdjacentHTML('beforeend', '<div class="cp104-day muted"></div>');
-    const notes = this.ctx.getNotes() || [];
-    const todayStr = today();
-    for (let day = 1; day <= days; day++) {
-      const date = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const events = notes.filter((note) => note.category === 'acara' && this.eventDate(note) === date);
-      const cell = document.createElement('div');
-      cell.className = `cp104-day${date === todayStr ? ' today' : ''}${date === this.selectedDate ? ' sel' : ''}`;
-      const dots = events.slice(0, 4).map((note) => `<span class="cp104-day-dot" title="${esc(note.title)}"></span>`).join('');
-      const more = events.length > 4 ? `<span class="cp104-day-more">+${events.length - 4}</span>` : '';
-      cell.innerHTML = `<b>${day}</b>${events.length ? `<div class="cp104-day-dots">${dots}${more}</div>` : ''}`;
-      cell.onclick = () => { this.selectedDate = date; this.renderCalendar(); };
-      cal.appendChild(cell);
-    }
-    const selectedEvents = notes.filter((note) => note.category === 'acara' && this.eventDate(note) === this.selectedDate).sort((a,b)=>String(a.eventTime || a.reminder?.datetime?.slice(11,16) || '99:99').localeCompare(String(b.eventTime || b.reminder?.datetime?.slice(11,16) || '99:99')));
-    const list = document.getElementById('cp104DayEvents');
-    document.getElementById('cp104SelCount').textContent = `${selectedEvents.length} acara`;
-    list.innerHTML = selectedEvents.length ? selectedEvents.map((note) => { const time=note.reminder?.datetime ? String(note.reminder.datetime).slice(11,16) : (note.eventTime || ''); return `<div style="padding:8px;border-bottom:1px solid #eee8dc"><div class="cp104-row"><div style="flex:1;cursor:pointer" data-event-open="${esc(note.id)}"><b>${esc(note.title)}</b><div class="cp104-muted">${time ? `🕐 ${esc(time)} · ` : ''}${note.eventLocation ? `${esc(note.eventLocation)} · ` : ''}${esc(SecurityService.stripHtml(note.bodyHTML || '').slice(0, 120))}</div></div><button type="button" class="cp104-btn" data-event-delete="${esc(note.id)}">Hapus</button></div></div>`; }).join('') : '<div class="cp104-muted">Tidak ada acara pada tanggal ini.</div>';
-    list.querySelectorAll('[data-event-open]').forEach((node) => node.onclick = () => this.ctx.openNote(node.dataset.eventOpen));
-    list.querySelectorAll('[data-event-delete]').forEach((node) => node.onclick = async () => this.deleteNote(node.dataset.eventDelete));
-  },
-
   async deleteNote(noteId) {
     if (!window.confirm('Hapus catatan ini?')) return;
     await this.ctx.deleteNote(noteId);
