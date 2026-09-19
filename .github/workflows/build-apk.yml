@@ -52,6 +52,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: TypeScript lint / type-check
+        run: npm run lint
+
       - name: Build web app
         run: npm run build
 
@@ -73,6 +76,7 @@ jobs:
           done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
           test -f android/app/src/main/java/com/catatanpintar/app/FileExportPlugin.java
+          test -f android/app/src/main/java/com/catatanpintar/app/FileOpenPlugin.java
 
       - name: Restore required Android project files
         run: |
@@ -140,6 +144,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: TypeScript lint / type-check
+        run: npm run lint
+
       - name: Build web app
         run: npm run build
 
@@ -162,6 +169,7 @@ jobs:
           done
           test -f android/app/src/main/java/com/catatanpintar/app/PdfViewerPlugin.java
           test -f android/app/src/main/java/com/catatanpintar/app/FileExportPlugin.java
+          test -f android/app/src/main/java/com/catatanpintar/app/FileOpenPlugin.java
 
       - name: Verify release tag matches app version
         run: |
