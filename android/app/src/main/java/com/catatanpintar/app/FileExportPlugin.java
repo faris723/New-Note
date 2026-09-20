@@ -49,12 +49,14 @@ public class FileExportPlugin extends Plugin {
                 done.put(MediaStore.Downloads.IS_PENDING, 0);
                 resolver.update(uri, done, null, null);
             } else {
-                File base = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                File dir = new File(base, "Catatan Pintar");
+                File publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File dir = new File(publicDownloads, "Catatan Pintar");
                 if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Folder Download tidak dapat dibuat.");
                 File outFile = new File(dir, name);
                 try (FileOutputStream out = new FileOutputStream(outFile)) { out.write(bytes); }
                 uri = Uri.fromFile(outFile);
+                // Beritahu media scanner supaya file langsung terlihat di aplikasi file manager/galeri
+                android.media.MediaScannerConnection.scanFile(getContext(), new String[]{ outFile.getAbsolutePath() }, new String[]{ mime }, null);
             }
             JSObject result = new JSObject();
             result.put("success", true);
