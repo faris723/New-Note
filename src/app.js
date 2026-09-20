@@ -45,7 +45,7 @@ function cacheElements() {
   const ids = [
     'financeBtn', 'scheduleBtn', 'manageCatBtn', 'filterToggleBtn', 'importMainBtn', 'exportMainBtn', 'selectModeBtn',
     'installAppBtn', 'updateBadgeBtn', 'installModalOverlay', 'closeInstallModalBtn', 'closeInstallModalFootBtn', 'doInstallPromptBtn', 'offlineIndicator',
-    'storageBarWrap', 'storageFill', 'storageText', 'storageWarningBanner',
+    'storageBarWrap', 'storageText',
     'envBadgeBtn', 'envBadgeIcon', 'envBadgeText',
     'storageEnvModalOverlay', 'closeStorageEnvModalBtn', 'closeStorageEnvModalFootBtn', 'envModalActiveName', 'switchEnvBtn', 'copyBrowserToAppBtn', 'copyAppToBrowserBtn',
     'browserWipedRecoveryBanner', 'quickRestoreVaultBtn', 'dismissRecoveryBannerBtn',
@@ -131,18 +131,9 @@ const UIService = {
   },
 
   async updateStorageMeter() {
-    const { percentage, formattedUsed, formattedMax } = await StorageService.getStorageUsage();
-    if (el.storageFill && el.storageText) {
-      el.storageFill.style.width = `${percentage}%`;
-      el.storageFill.className = 'storage-fill' + (percentage >= 85 ? ' danger' : percentage >= 70 ? ' warn' : '');
-      el.storageText.textContent = `${formattedUsed} / ~${formattedMax} (${percentage}%)`;
-    }
-    if (el.storageWarningBanner) {
-      if (percentage >= 80) {
-        el.storageWarningBanner.classList.add('show');
-      } else {
-        el.storageWarningBanner.classList.remove('show');
-      }
+    const { formattedUsed } = await StorageService.getStorageUsage();
+    if (el.storageText) {
+      el.storageText.textContent = formattedUsed;
     }
   },
 
