@@ -244,14 +244,14 @@ export const AttachmentService = {
       }
     }
 
-    // 2. Native Android: stream the Blob in small chunks. The previous
-    // implementation converted the whole file to Base64 at once, which could
-    // multiply RAM usage and make large PDF/ZIP exports fail.
+    // 2. Native Android: use the system Save As picker. This is intentionally
+    // different from a silent Download write: Android users get the same
+    // folder/file selection experience as the web File System Access picker.
     let nativeErrorReason = null;
     try {
       if (window.Capacitor?.isNativePlatform?.()) {
         if (!FileExport?.startExport || !FileExport?.appendExportChunk || !FileExport?.finishExport) {
-          throw new Error('Plugin ekspor terbaru belum terpasang pada APK ini.');
+          throw new Error('Plugin FileExport terbaru belum terpasang pada APK ini.');
         }
         const CHUNK_SIZE = 256 * 1024;
         await FileExport.startExport({
@@ -261,8 +261,7 @@ export const AttachmentService = {
         try {
           for (let offset = 0; offset < blob.size; offset += CHUNK_SIZE) {
             const chunk = blob.slice(offset, Math.min(offset + CHUNK_SIZE, blob.size));
-            const buffer = await chunk.arrayBuffer();
-            const bytes = new Uint8Array(buffer);
+            const bytes = new Uint8Array(await chunk.arrayBuffer());
             let binary = '';
             const step = 0x8000;
             for (let i = 0; i < bytes.length; i += step) {
@@ -270,14 +269,24 @@ export const AttachmentService = {
             }
             await FileExport.appendExportChunk({ base64: btoa(binary) });
           }
+          // finishExport opens Android's ACTION_CREATE_DOCUMENT. The native
+          // plugin resolves only after the user chooses a destination and the
+          // file has actually been written and verified.
           const result = await FileExport.finishExport();
-          return { success: true, method: 'android-downloads', uri: result?.uri || null, location: result?.location || null, size: result?.size || blob.size };
+          return {
+            success: true,
+            method: 'android-save-picker',
+            uri: result?.uri || null,
+            location: result?.location || null,
+            size: result?.size || blob.size
+          };
         } catch (chunkErr) {
           try { await FileExport.cancelExport(); } catch (_) {}
           throw chunkErr;
         }
       }
     } catch (nativeErr) {
+      if (nativeErr?.code === 'USER_CANCELLED') return { success: false, cancelled: true };
       console.warn('Native Android export fallback:', nativeErr);
       nativeErrorReason = nativeErr?.message || String(nativeErr);
     }
@@ -299,7 +308,7 @@ export const AttachmentService = {
         this.revokeManagedBlobUrl(url);
       }, 3500);
 
-      return { success: true, method: 'blob-download', nativeErrorReason: nativeErrorReason || null };
+      return { success: true, method: 'blob-download' };
     } catch (e) {
       console.error('Download error:', e);
       throw new Error('Gagal mengunduh berkas: ' + e.message);
