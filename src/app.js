@@ -77,7 +77,7 @@ function cacheElements() {
     'importOverlay', 'closeImportModalBtn', 'importDropZone', 'importFileInput', 'importFileInfo', 'importFileName', 'importFileSize', 'importFileStats', 'importStatusMsg', 'importProgressWrap', 'importProgressBar', 'importProgressText', 'cancelImportBtn', 'doImportBtn',
     'financeOverlay', 'closeFinanceTopBtn', 'financeFrom', 'financeTo', 'financeSummary', 'financeChartsWrap', 'donutChartContainer', 'barChartContainer', 'financeTxList', 'debtUnpaidCount', 'debtUnpaidList', 'debtPaidCount', 'debtPaidList', 'exportFinanceBtn', 'closeFinanceBtn',
     'sketchOverlay', 'closeSketchBtn', 'sketchToolPen', 'sketchToolBrush', 'sketchToolEraser', 'sketchSize', 'sketchSizeVal', 'sketchPalette', 'sketchCustomColor', 'sketchUndoBtn', 'sketchRedoBtn', 'sketchClearBtn', 'sketchStage', 'sketchCanvas', 'cancelSketchBtn', 'insertSketchBtn',
-    'reminderAlertOverlay', 'reminderAlertTitle', 'reminderAlertBody', 'reminderAlertDismissBtn', 'reminderAlertOpenBtn',
+    'reminderAlertOverlay', 'reminderAlertHeading', 'reminderAlertTitle', 'reminderAlertBody', 'reminderAlertDismissBtn', 'reminderAlertOpenBtn',
     'chatOverlay', 'closeChatBtn', 'chatMessages', 'chatInput', 'chatSendBtn',
     'viewerOverlay', 'viewerFileName', 'viewerFileMeta', 'downloadViewerBtn', 'editViewerBtn', 'closeViewerBtn', 'viewerBody',
     'toastContainer', 'printArea'
@@ -2776,7 +2776,9 @@ async function init() {
       () => notes,
       async (triggeredNote) => {
         ReminderService.activeAlertNote = triggeredNote;
-        if (el.reminderAlertTitle) el.reminderAlertTitle.textContent = triggeredNote.title || 'Catatan';
+        const noteTitle = triggeredNote.title || 'Catatan';
+        if (el.reminderAlertHeading) el.reminderAlertHeading.textContent = `Waktunya ${noteTitle}!`;
+        if (el.reminderAlertTitle) el.reminderAlertTitle.textContent = '';
         let bodyText = SecurityService.stripHtml(triggeredNote.bodyHTML || '');
         if (triggeredNote.category === 'acara' && (triggeredNote.eventTime || triggeredNote.eventLocation)) {
           const parts = [];
