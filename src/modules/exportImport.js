@@ -245,6 +245,16 @@ export const ExportImportService = {
     const dateStr = localDateTag(now);
     const portableNotes = await buildPortableNotes(notes);
     const financeState = StorageService.getFinanceState();
+    if (format === 'json' || format === 'zip') {
+      const missingAttachments = [];
+      portableNotes.forEach(note => (note.attachments || []).forEach(att => {
+        if (!att.dataURL) missingAttachments.push(`${note.title || note.id}: ${att.name || 'lampiran'}`);
+      }));
+      if (missingAttachments.length) {
+        const sample = missingAttachments.slice(0, 3).join('; ');
+        throw new Error(`Backup dibatalkan karena ${missingAttachments.length} lampiran tidak dapat dibaca. Contoh: ${sample}`);
+      }
+    }
     const backupData = {
       app: 'Catatan Pintar — Offline',
       version: APP_VERSION,

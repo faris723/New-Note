@@ -244,24 +244,38 @@ export const AttachmentService = {
       }
     }
 
-    // 2. Native Android: write directly to the user's Download/Catatan Pintar
-    // folder through the small native FileExport plugin. This avoids the
-    // unreliable <a download> behavior of Android WebView for large blobs.
+    // 2. Native Android: stream the Blob in small chunks. The previous
+    // implementation converted the whole file to Base64 at once, which could
+    // multiply RAM usage and make large PDF/ZIP exports fail.
     let nativeErrorReason = null;
     try {
       if (window.Capacitor?.isNativePlatform?.()) {
-        if (!FileExport?.saveBase64) {
-          throw new Error('Plugin FileExport tidak terdaftar di build APK ini (kemungkinan APK belum berisi kode plugin terbaru).');
+        if (!FileExport?.startExport || !FileExport?.appendExportChunk || !FileExport?.finishExport) {
+          throw new Error('Plugin ekspor terbaru belum terpasang pada APK ini.');
         }
-        const dataUrl = await this.blobToDataURL(blob);
-        const comma = dataUrl.indexOf(',');
-        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-        const result = await FileExport.saveBase64({
+        const CHUNK_SIZE = 256 * 1024;
+        await FileExport.startExport({
           name: safeName,
-          mime: mimeType || blob.type || 'application/octet-stream',
-          base64
+          mime: mimeType || blob.type || 'application/octet-stream'
         });
-        return { success: true, method: 'android-downloads', uri: result?.uri || null, location: result?.location || null };
+        try {
+          for (let offset = 0; offset < blob.size; offset += CHUNK_SIZE) {
+            const chunk = blob.slice(offset, Math.min(offset + CHUNK_SIZE, blob.size));
+            const buffer = await chunk.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            const step = 0x8000;
+            for (let i = 0; i < bytes.length; i += step) {
+              binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + step, bytes.length)));
+            }
+            await FileExport.appendExportChunk({ base64: btoa(binary) });
+          }
+          const result = await FileExport.finishExport();
+          return { success: true, method: 'android-downloads', uri: result?.uri || null, location: result?.location || null, size: result?.size || blob.size };
+        } catch (chunkErr) {
+          try { await FileExport.cancelExport(); } catch (_) {}
+          throw chunkErr;
+        }
       }
     } catch (nativeErr) {
       console.warn('Native Android export fallback:', nativeErr);

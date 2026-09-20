@@ -14,6 +14,7 @@ import { APP_VERSION } from '../version.js';
 import { AttachmentService } from './attachment.js';
 import { FinancePdfReportService } from './financePdfReport.js';
 import { StorageService } from './storage.js';
+import { ExportImportService } from './exportImport.js';
 
 const OBL_KEY = 'cp_obligations_v2';
 const SAV_KEY = 'cp_savings_v2';
@@ -1179,8 +1180,9 @@ export const FeaturePackService = {
     const ids = this.ctx.getSelectedIds(); if (!ids.length) return;
     try {
       const data = (this.ctx.getNotes() || []).filter((note) => ids.includes(note.id));
-      const json = JSON.stringify({ app: 'Catatan Pintar', version: APP_VERSION, exportedAt: new Date().toISOString(), notes: data }, null, 2);
-      const result = await AttachmentService.saveOrDownloadBlob(new Blob([json], { type: 'application/json' }), `CatatanPintar_Terpilih_${today()}.json`, 'application/json');
+      const categories = this.ctx.getCategories?.() || [];
+      const exported = await ExportImportService.exportNotes(data, categories, 'json');
+      const result = exported?.result || exported;
       this.ctx.toast(result?.method === 'android-downloads' ? 'Ekspor catatan terpilih tersimpan di Download/Catatan Pintar.' : 'Ekspor catatan terpilih berhasil dibuat.', 'info');
     } catch (err) {
       this.ctx.toast(`Gagal mengekspor catatan terpilih: ${err.message || err}`, 'danger');
