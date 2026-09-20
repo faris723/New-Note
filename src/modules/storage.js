@@ -1028,16 +1028,13 @@ export const StorageService = {
    */
   async getStorageUsage() {
     let totalBytes = 0;
-    let maxBytes = 100 * 1024 * 1024; // 100MB base allocation
-
     try {
-      // 1. Check navigator storage estimate
+      // 1. Coba pakai navigator storage estimate (indikasi kasar di web)
       if (navigator.storage && navigator.storage.estimate) {
         const est = await navigator.storage.estimate();
         if (est.usage !== undefined) totalBytes = est.usage;
-        if (est.quota !== undefined) maxBytes = est.quota;
       } else {
-        // Estimate from in-memory cache
+        // Perkiraan dari cache di memori
         const notesStr = JSON.stringify(inMemoryCache.notes || []);
         totalBytes = notesStr.length * 2;
       }
@@ -1045,13 +1042,13 @@ export const StorageService = {
       console.warn('Storage calculation estimate:', e);
     }
 
-    const percentage = Math.min(100, Math.round((totalBytes / maxBytes) * 100)) || 0;
+    // CATATAN: Aplikasi ini menyimpan data sebagai berkas fisik nyata di
+    // penyimpanan perangkat (bukan dibatasi kuota localStorage/IndexedDB),
+    // jadi TIDAK ADA batas/kuota buatan yang ditampilkan ke pengguna —
+    // cuma total pemakaian aktual.
     return {
       totalBytes,
-      maxBytes,
-      percentage,
-      formattedUsed: AttachmentService.formatSize(totalBytes),
-      formattedMax: AttachmentService.formatSize(maxBytes)
+      formattedUsed: AttachmentService.formatSize(totalBytes)
     };
   },
 
