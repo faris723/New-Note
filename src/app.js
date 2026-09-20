@@ -2105,9 +2105,16 @@ function bindEventListeners() {
       setProgress(25, 'Mengumpulkan catatan dan lampiran…');
       const result = await ExportImportService.exportNotes(targets, categories, fmt);
       setProgress(100, 'Ekspor selesai.');
-      const savedLocation = result?.result?.location || (result?.result?.method === 'android-downloads' ? 'Download/Catatan Pintar/' : 'folder unduhan yang dipilih');
+      const method = result?.result?.method;
       const formatLabel = fmt === 'pdf' ? 'PDF' : fmt.toUpperCase();
-      UIService.showToast(`Ekspor ${targets.length} catatan ke ${formatLabel} berhasil. Lokasi: ${savedLocation}`, 'info', null, null, 6500);
+      if (method === 'android-downloads') {
+        const savedLocation = result?.result?.location || 'Download/Catatan Pintar/';
+        UIService.showToast(`✅ Ekspor ${targets.length} catatan ke ${formatLabel} berhasil. Lokasi: ${savedLocation}`, 'info', null, null, 6500);
+      } else if (method === 'blob-download') {
+        UIService.showToast(`Ekspor ${targets.length} catatan ke ${formatLabel} diproses lewat metode unduhan cadangan — kalau berkas tidak ditemukan, coba perbarui aplikasi ke versi terbaru.`, 'info', null, null, 7500);
+      } else {
+        UIService.showToast(`Ekspor ${targets.length} catatan ke ${formatLabel} berhasil.`, 'info', null, null, 6500);
+      }
       setTimeout(() => el.exportOverlay.classList.remove('open'), 700);
       return result;
     } catch (err) {
