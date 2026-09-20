@@ -1582,6 +1582,7 @@ export const FeaturePackService = {
     const modal = document.getElementById('cp104ExportModal');
     if (!modal) return;
     const submitBtn = modal.querySelector('#cp104ExpSubmitPdf');
+    const reportScope = modal.dataset.reportScope || 'expense_only';
     const fromDate = modal.querySelector('#cp104ExpFrom')?.value || '';
     const toDate = modal.querySelector('#cp104ExpTo')?.value || '';
 
