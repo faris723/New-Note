@@ -247,8 +247,12 @@ export const AttachmentService = {
     // 2. Native Android: write directly to the user's Download/Catatan Pintar
     // folder through the small native FileExport plugin. This avoids the
     // unreliable <a download> behavior of Android WebView for large blobs.
+    let nativeErrorReason = null;
     try {
-      if (window.Capacitor?.isNativePlatform?.() && FileExport?.saveBase64) {
+      if (window.Capacitor?.isNativePlatform?.()) {
+        if (!FileExport?.saveBase64) {
+          throw new Error('Plugin FileExport tidak terdaftar di build APK ini (kemungkinan APK belum berisi kode plugin terbaru).');
+        }
         const dataUrl = await this.blobToDataURL(blob);
         const comma = dataUrl.indexOf(',');
         const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
@@ -257,10 +261,11 @@ export const AttachmentService = {
           mime: mimeType || blob.type || 'application/octet-stream',
           base64
         });
-        return { success: true, method: 'android-downloads', uri: result?.uri || null };
+        return { success: true, method: 'android-downloads', uri: result?.uri || null, location: result?.location || null };
       }
     } catch (nativeErr) {
       console.warn('Native Android export fallback:', nativeErr);
+      nativeErrorReason = nativeErr?.message || String(nativeErr);
     }
 
     // 3. Mobile / browser fallback: standard Blob URL download
@@ -280,7 +285,7 @@ export const AttachmentService = {
         this.revokeManagedBlobUrl(url);
       }, 3500);
 
-      return { success: true, method: 'blob-download' };
+      return { success: true, method: 'blob-download', nativeErrorReason: nativeErrorReason || null };
     } catch (e) {
       console.error('Download error:', e);
       throw new Error('Gagal mengunduh berkas: ' + e.message);
