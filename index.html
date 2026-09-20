@@ -199,35 +199,6 @@
       background: #eee8d8;
       border-color: var(--ink-soft);
     }
-    .storage-meter {
-      flex: 1;
-      min-width: 80px;
-      height: 6px;
-      background: var(--card-edge);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .storage-fill {
-      height: 100%;
-      background: var(--moss);
-      width: 0%;
-      transition: width .3s, background-color .3s;
-    }
-    .storage-fill.warn { background: var(--warning); }
-    .storage-fill.danger { background: var(--danger); }
-
-    .storage-warning-banner {
-      display: none;
-      background: #fff4e5;
-      border: 1px solid var(--warning);
-      color: #7c4a03;
-      padding: 10px 14px;
-      font-size: 12px;
-      line-height: 1.5;
-      margin: 8px 0;
-      border-radius: 2px;
-    }
-    .storage-warning-banner.show { display: block; }
 
     .recovery-banner {
       background: #fef2f2;
@@ -2453,21 +2424,13 @@
       </div>
     </header>
 
-    <!-- Storage Usage Meter & Quota Indicator -->
-    <div class="storage-bar-wrap" id="storageBarWrap" title="Kapasitas penyimpanan perangkat internal (Terisolasi per ruang)">
+    <!-- Storage Usage Indicator (menampilkan pemakaian riil, tanpa batas/kuota) -->
+    <div class="storage-bar-wrap" id="storageBarWrap" title="Total ukuran data & lampiran yang tersimpan (tidak dibatasi kuota tertentu)">
       <button type="button" class="env-badge-btn" id="envBadgeBtn" title="Klik untuk melihat status isolasi ruang data aplikasi vs browser">
         <span id="envBadgeIcon">📱</span> <span id="envBadgeText">Mode Aplikasi</span>
       </button>
-      <span>💾 Penyimpanan:</span>
-      <div class="storage-meter">
-        <div class="storage-fill" id="storageFill"></div>
-      </div>
-      <span id="storageText">0 KB / 100 MB (0%)</span>
-    </div>
-
-    <!-- Storage Warning Banner -->
-    <div class="storage-warning-banner" id="storageWarningBanner">
-      ⚠️ <b>Peringatan Kapasitas:</b> Ruang penyimpanan perangkat Anda hampir penuh (&gt;80%). Sebaiknya hapus lampiran yang tidak diperlukan atau lakukan ekspor cadangan secara berkala.
+      <span>💾 Penyimpanan digunakan:</span>
+      <span id="storageText">0 KB</span>
     </div>
 
     <!-- Disaster Recovery Banner (Anti Browser Wipe) -->
@@ -3277,6 +3240,6 @@ cd android
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <!-- Modular Application Script -->
-  <script type="module" src="./src/app.js?v=1.0.20-finance-pdf-scope"></script>
+  <script type="module" src="./src/app.js?v=1.0.21-storage-display"></script>
 </body>
 </html>
