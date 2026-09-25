@@ -2098,8 +2098,10 @@ function bindEventListeners() {
       setProgress(100, 'Ekspor selesai.');
       const method = result?.result?.method;
       const formatLabel = fmt === 'pdf' ? 'PDF' : fmt.toUpperCase();
-      if (method === 'android-downloads') {
-        const savedLocation = result?.result?.location || 'Download/Catatan Pintar/';
+      if (result?.cancelled) {
+        UIService.showToast('Ekspor dibatalkan.', 'info');
+      } else if (method === 'android-save-picker' || method === 'android-downloads') {
+        const savedLocation = result?.result?.location || 'lokasi yang kamu pilih';
         UIService.showToast(`✅ Ekspor ${targets.length} catatan ke ${formatLabel} berhasil. Lokasi: ${savedLocation}`, 'info', null, null, 6500);
       } else if (method === 'blob-download') {
         UIService.showToast(`Ekspor ${targets.length} catatan ke ${formatLabel} diproses lewat metode unduhan cadangan — kalau berkas tidak ditemukan, coba perbarui aplikasi ke versi terbaru.`, 'info', null, null, 7500);
