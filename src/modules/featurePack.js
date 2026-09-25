@@ -1552,8 +1552,12 @@ export const FeaturePackService = {
             history: loadHistory()
           };
           const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-          await AttachmentService.saveOrDownloadBlob(blob, `catatan-pintar-keuangan-${today()}.json`, 'application/json');
-          this.ctx.toast('Data JSON keuangan berhasil diunduh.', 'info');
+          const jsonSaveResult = await AttachmentService.saveOrDownloadBlob(blob, `catatan-pintar-keuangan-${today()}.json`, 'application/json');
+          if (jsonSaveResult?.cancelled) {
+            this.ctx.toast('Ekspor JSON dibatalkan.', 'info');
+          } else {
+            this.ctx.toast('Data JSON keuangan berhasil diunduh.', 'info');
+          }
           modal.classList.remove('open');
         } catch (err) {
           this.ctx.toast(`Gagal ekspor JSON: ${err.message || err}`, 'danger');
@@ -1720,8 +1724,11 @@ export const FeaturePackService = {
       const fileName = `${filePrefix}_CatatanPintar_${safeDateTag}.pdf`;
 
       const saveResult = await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
-      if (saveResult?.method === 'android-downloads') {
-        this.ctx.toast(`✅ PDF tersimpan di Download/Catatan Pintar/${fileName}`, 'info', 6000);
+      if (saveResult?.cancelled) {
+        this.ctx.toast('Ekspor PDF dibatalkan.', 'info');
+      } else if (saveResult?.method === 'android-save-picker' || saveResult?.method === 'android-downloads') {
+        const loc = saveResult?.location || 'lokasi yang kamu pilih';
+        this.ctx.toast(`✅ PDF tersimpan di ${loc}`, 'info', 6000);
       } else if (saveResult?.method === 'blob-download') {
         this.ctx.toast('PDF diproses lewat metode unduhan browser biasa — kalau tidak ketemu filenya, cek folder Download utama HP kamu, atau update aplikasi ke versi terbaru.', 'info', 7000);
       } else {
