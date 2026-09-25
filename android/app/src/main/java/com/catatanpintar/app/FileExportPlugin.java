@@ -95,7 +95,7 @@ public class FileExportPlugin extends Plugin {
     private synchronized void fileSaveResult(PluginCall call, ActivityResult result) {
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) {
             cleanupTemp();
-            if (call != null) call.reject("USER_CANCELLED", "Penyimpanan dibatalkan oleh pengguna.");
+            if (call != null) call.reject("Penyimpanan dibatalkan oleh pengguna.", "USER_CANCELLED");
             return;
         }
         Uri uri = result.getData().getData();
