@@ -270,7 +270,7 @@ export const ExportImportService = {
       const jsonStr = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Backup_${dateStr}.json`, 'application/json');
-      return { success: true, count: notes.length, result };
+      return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     if (format === 'zip') {
@@ -299,7 +299,7 @@ export const ExportImportService = {
       for (const entry of zipEntries) resolvedEntries.push({ name: entry.name, data: entry.data instanceof Promise ? await entry.data : entry.data });
       const zipBlob = makeStoredZip(resolvedEntries);
       const result = await AttachmentService.saveOrDownloadBlob(zipBlob, `CatatanPintar_Arsip_${dateStr}.zip`, 'application/zip');
-      return { success: true, count: notes.length, result };
+      return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     if (format === 'word') {
@@ -331,7 +331,7 @@ export const ExportImportService = {
       htmlDoc += '</body></html>';
       const blob = buildSimpleDocx(htmlDoc);
       const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      return { success: true, count: notes.length, result };
+      return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     if (format === 'txt') {
@@ -352,13 +352,13 @@ export const ExportImportService = {
 
       const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
       const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Teks_${dateStr}.txt`, 'text/plain');
-      return { success: true, count: notes.length, result };
+      return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     if (format === 'pdf') {
       const blob = buildSimplePdf(notes);
       const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.pdf`, 'application/pdf');
-      return { success: true, count: notes.length, result };
+      return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     return { success: false, error: 'Format ekspor tidak dikenal' };
