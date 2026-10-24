@@ -5,56 +5,71 @@ export const ExportImportService = {
     
     async exportNotes(dataCatatan, formatParam = 'json') {
         try {
-            // 1. PENDETEKSI FORMAT AGRESIF
-            // Mengekstrak format dari string, objek, maupun event klik UI
+            // 1. PENDETEKSI FORMAT YANG AMAN
             let format = 'json';
             
             if (typeof formatParam === 'string') {
                 format = formatParam.toLowerCase();
             } else if (formatParam && typeof formatParam === 'object') {
-                // Membongkar objek untuk mencari kata kunci format yang diklik pengguna
-                const targetText = formatParam.target ? (formatParam.target.value || formatParam.target.textContent || '') : '';
-                const objStr = JSON.stringify(formatParam) + String(targetText);
-                const text = objStr.toLowerCase();
-                
-                if (text.includes('pdf')) format = 'pdf';
-                else if (text.includes('zip')) format = 'zip';
-                else if (text.includes('doc') || text.includes('word')) format = 'doc';
-                else if (text.includes('txt')) format = 'txt';
+                // Mencari dari atribut data standar tanpa mengubah keseluruhan objek
+                if (formatParam.detail && typeof formatParam.detail === 'string') {
+                    format = formatParam.detail.toLowerCase();
+                } else if (formatParam.target && formatParam.target.dataset && formatParam.target.dataset.format) {
+                    format = formatParam.target.dataset.format.toLowerCase();
+                } else if (formatParam.value && typeof formatParam.value === 'string') {
+                    format = formatParam.value.toLowerCase();
+                }
+            }
+            
+            // Validasi format akhir, fallback ke json jika tidak dikenali
+            if (!['json', 'txt', 'doc', 'pdf', 'zip'].includes(format)) {
+                format = 'json'; 
             }
 
-            console.log(`Mengekspor dengan format final: ${format}`);
+            console.log(`Format final yang akan diekspor: ${format}`);
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            
             let stringData = '';
-            let fileExtension = format;
+            let fileName = `Catatan_Pintar_${timestamp}.${format}`;
             let mimeType = 'text/plain';
 
-            // 2. ENGINE KONVERSI DATA
-            if (format === 'txt') {
-                stringData = this._convertToText(dataCatatan);
-                mimeType = 'text/plain';
-            } else if (format === 'doc') {
-                stringData = this._convertToHTML(dataCatatan);
-                mimeType = 'application/msword';
-            } else if (format === 'pdf') {
-                // Fallback: Disimpan sebagai dokumen HTML dengan ekstensi PDF agar tidak crash.
-                // Note: Untuk PDF biner murni, Anda akan membutuhkan library seperti jsPDF ke depannya.
-                stringData = this._convertToHTML(dataCatatan);
-                mimeType = 'application/pdf';
-            } else if (format === 'zip') {
-                // Fallback sementara untuk Zip
-                stringData = JSON.stringify(dataCatatan, null, 2);
-                mimeType = 'application/zip';
-            } else {
-                stringData = JSON.stringify(dataCatatan, null, 2);
-                fileExtension = 'json';
-                mimeType = 'application/json';
+            // 2. NORMALISASI DATA (Mencegah file kosong)
+            let notesArray = [];
+            if (Array.isArray(dataCatatan)) {
+                notesArray = dataCatatan;
+            } else if (dataCatatan && Array.isArray(dataCatatan.notes)) {
+                notesArray = dataCatatan.notes;
+            } else if (dataCatatan && Array.isArray(dataCatatan.data)) {
+                notesArray = dataCatatan.data;
+            } else if (dataCatatan && typeof dataCatatan === 'object') {
+                notesArray = [dataCatatan];
             }
 
-            const fileName = `Catatan_Pintar_${timestamp}.${fileExtension}`;
+            // 3. ENGINE KONVERSI
+            if (format === 'json' || format === 'zip') {
+                stringData = JSON.stringify(notesArray, null, 2);
+                fileName = `Catatan_Pintar_${timestamp}.json`;
+                mimeType = 'application/json';
+            } 
+            else if (format === 'txt') {
+                stringData = this._convertToText(notesArray);
+                mimeType = 'text/plain';
+            }
+            else if (format === 'doc' || format === 'pdf') {
+                stringData = this._convertToHTML(notesArray);
+                
+                if (format === 'doc') {
+                    fileName = `Catatan_Pintar_${timestamp}.doc`;
+                    mimeType = 'application/msword';
+                } else {
+                    // PENTING: Untuk PDF tanpa library eksternal, kita HARUS menyimpannya 
+                    // sebagai file .html agar tidak dianggap rusak oleh OS.
+                    // Pengguna dapat membukanya di browser lalu memilih "Print -> Save as PDF".
+                    fileName = `Catatan_Pintar_${timestamp}_Cetak_PDF.html`;
+                    mimeType = 'text/html';
+                }
+            }
 
-            // 3. EKSEKUSI PENYIMPANAN
+            // 4. EKSEKUSI PENYIMPANAN
             if (Capacitor.isNativePlatform()) {
                 return await this._exportNative(stringData, fileName, mimeType);
             } else {
@@ -70,38 +85,61 @@ export const ExportImportService = {
         }
     },
 
-    // --- HELPER: Pengubah JSON ke Text ---
-    _convertToText(data) {
-        let text = "=== DATA CATATAN PINTAR ===\n\n";
-        let catatanArray = Array.isArray(data) ? data : (data.notes || [data]);
-        
-        catatanArray.forEach((note, index) => {
+    // --- HELPER: Pengekstrak Data Fleksibel ---
+    _getNoteFields(note) {
+        return {
+            title: note.title || note.judul || note.name || 'Tanpa Judul',
+            category: note.category || note.kategori || 'Umum',
+            date: note.date || note.createdAt || note.tanggal || new Date().toLocaleDateString(),
+            content: note.content || note.text || note.isi || note.body || note.catatan || '(Tidak ada isi catatan)'
+        };
+    },
+
+    // --- HELPER: Konversi ke Text ---
+    _convertToText(notesArray) {
+        let text = "=== ARSIP CATATAN PINTAR ===\n\n";
+        notesArray.forEach((n, index) => {
+            const note = this._getNoteFields(n);
             text += `Catatan #${index + 1}\n`;
-            text += `Judul   : ${note.title || 'Tanpa Judul'}\n`;
-            text += `Kategori: ${note.category || '-'}\n`;
-            text += `Tanggal : ${note.date || note.createdAt || '-'}\n`;
-            text += `Isi Catatan:\n${note.content || note.text || '-'}\n`;
-            text += `\n--------------------------------------\n\n`;
+            text += `Judul    : ${note.title}\n`;
+            text += `Kategori : ${note.category}\n`;
+            text += `Tanggal  : ${note.date}\n`;
+            text += `--------------------------------------\n`;
+            text += `${note.content}\n`;
+            text += `======================================\n\n`;
         });
         return text;
     },
 
-    // --- HELPER: Pengubah JSON ke HTML (Untuk Word/Doc) ---
-    _convertToHTML(data) {
-        let html = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset='utf-8'><title>Ekspor Catatan Pintar</title></head>
-        <body style="font-family: Arial, sans-serif; padding: 20px;">
-        <h1 style="text-align: center; color: #2e7d32;">Arsip Catatan Pintar</h1><hr>
+    // --- HELPER: Konversi ke HTML (Untuk Doc dan PDF fallback) ---
+    _convertToHTML(notesArray) {
+        let html = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Arsip Catatan Pintar</title>
+            <style>
+                body { font-family: sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+                .note { border-bottom: 2px solid #ccc; margin-bottom: 20px; padding-bottom: 20px; }
+                .title { color: #2e7d32; margin-bottom: 5px; }
+                .meta { font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px; }
+                .content { white-space: pre-wrap; }
+            </style>
+        </head>
+        <body>
+            <h1 style="text-align: center;">Arsip Catatan Pintar</h1>
+            <hr><br>
         `;
         
-        let catatanArray = Array.isArray(data) ? data : (data.notes || [data]);
-        
-        catatanArray.forEach((note) => {
-            html += `<h2 style="color: #333; margin-bottom: 5px;">${note.title || 'Tanpa Judul'}</h2>`;
-            html += `<p style="font-size: 12px; color: #666; margin-top: 0;"><i>Kategori: ${note.category || '-'} | Tanggal: ${note.date || note.createdAt || '-'}</i></p>`;
-            html += `<p style="font-size: 14px; line-height: 1.6;">${(note.content || note.text || '').replace(/\n/g, '<br>')}</p>`;
-            html += `<br><hr><br>`;
+        notesArray.forEach((n) => {
+            const note = this._getNoteFields(n);
+            html += `
+            <div class="note">
+                <h2 class="title">${note.title}</h2>
+                <p class="meta">Kategori: ${note.category} | Tanggal: ${note.date}</p>
+                <div class="content">${note.content}</div>
+            </div>
+            `;
         });
         html += "</body></html>";
         return html;
