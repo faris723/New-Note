@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -46,7 +47,7 @@ public class FileExportPlugin extends Plugin {
                 try {
                     ParcelFileDescriptor pfd = getContext().getContentResolver().openFileDescriptor(uri, "w");
                     FileOutputStream fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
-                    fileOutputStream.write(dataToWrite.getBytes());
+                    fileOutputStream.write(dataToWrite.getBytes(StandardCharsets.UTF_8));
                     fileOutputStream.close();
                     pfd.close();
 
