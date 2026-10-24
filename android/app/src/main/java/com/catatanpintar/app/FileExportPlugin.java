@@ -52,11 +52,16 @@ public class FileExportPlugin extends Plugin {
             if (dataIntent != null) {
                 Uri uri = dataIntent.getData();
                 String dataToWrite = call.getString("data", "");
+                boolean isBase64 = call.getBoolean("isBase64", false);
 
                 try {
                     ParcelFileDescriptor pfd = getContext().getContentResolver().openFileDescriptor(uri, "w");
                     FileOutputStream fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
-                    fileOutputStream.write(dataToWrite.getBytes(StandardCharsets.UTF_8));
+                    if (isBase64) {
+                        fileOutputStream.write(Base64.decode(dataToWrite, Base64.DEFAULT));
+                    } else {
+                        fileOutputStream.write(dataToWrite.getBytes(StandardCharsets.UTF_8));
+                    }
                     fileOutputStream.close();
                     pfd.close();
 
