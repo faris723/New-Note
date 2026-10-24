@@ -23,6 +23,7 @@ public class FileExportPlugin extends Plugin {
         String fileName = call.getString("fileName", "Catatan_Pintar.txt");
         String mimeType = call.getString("mimeType", "text/plain"); 
         
+        // Mencegah OS mematikan plugin ini saat jendela file manager terbuka
         call.setKeepAlive(true); 
 
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -37,38 +38,55 @@ public class FileExportPlugin extends Plugin {
     private void saveFileResult(PluginCall call, ActivityResult result) {
         if (result.getResultCode() == Activity.RESULT_OK) {
             Intent dataIntent = result.getData();
-            if (dataIntent != null) {
+            
+            if (dataIntent != null && dataIntent.getData() != null) {
                 Uri uri = dataIntent.getData();
                 String dataToWrite = call.getString("data", "");
                 Boolean isBase64 = call.getBoolean("isBase64", false);
 
-                try {
-                    ParcelFileDescriptor pfd = getContext().getContentResolver().openFileDescriptor(uri, "w");
-                    FileOutputStream fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
-                    
-                    // Decode Base64 jika data berupa PDF/ZIP biner
-                    if (isBase64) {
-                        byte[] decodedBytes = Base64.decode(dataToWrite, Base64.DEFAULT);
-                        fileOutputStream.write(decodedBytes);
-                    } else {
-                        fileOutputStream.write(dataToWrite.getBytes());
-                    }
-                    
-                    fileOutputStream.close();
-                    pfd.close();
+                ParcelFileDescriptor pfd = null;
+                FileOutputStream fileOutputStream = null;
 
-                    JSObject ret = new JSObject();
-                    ret.put("success", true);
-                    ret.put("uri", uri.toString());
-                    call.resolve(ret);
+                try {
+                    pfd = getContext().getContentResolver().openFileDescriptor(uri, "w");
+                    if (pfd != null) {
+                        fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
+                        
+                        if (Boolean.TRUE.equals(isBase64)) {
+                            // Proses file biner asli (ZIP/PDF)
+                            byte[] decodedBytes = Base64.decode(dataToWrite, Base64.DEFAULT);
+                            fileOutputStream.write(decodedBytes);
+                        } else {
+                            // Proses teks murni (JSON/TXT/Word) dengan jaminan karakter UTF-8
+                            fileOutputStream.write(dataToWrite.getBytes("UTF-8"));
+                        }
+                        
+                        fileOutputStream.flush(); // Pastikan seluruh bit tertulis
+                        
+                        JSObject ret = new JSObject();
+                        ret.put("success", true);
+                        ret.put("uri", uri.toString());
+                        call.resolve(ret);
+                    } else {
+                        call.reject("Gagal mendapatkan akses penulisan ke memori perangkat.");
+                    }
                 } catch (Exception e) {
-                    call.reject("Gagal menulis file: " + e.getMessage());
+                    call.reject("Kesalahan saat merakit file: " + e.getMessage());
+                } finally {
+                    // Jaring pengaman mutlak untuk mencegah memory leak (kebocoran RAM)
+                    try {
+                        if (fileOutputStream != null) fileOutputStream.close();
+                        if (pfd != null) pfd.close();
+                    } catch (Exception ignored) {
+                        // Abaikan error saat proses penutupan paksa
+                    }
                 }
             } else {
-                call.reject("URI file tidak ditemukan.");
+                call.reject("Sistem tidak mengembalikan alamat file yang valid.");
             }
         } else {
-            call.reject("USER_CANCELLED");
+            // Ditangkap sebagai error.message === 'USER_CANCELLED' di JavaScript
+            call.reject("USER_CANCELLED"); 
         }
     }
 }
