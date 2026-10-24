@@ -60,16 +60,34 @@ export const ExportImportService = {
             // PDF dan ZIP menghasilkan berkas BINER sungguhan (lewat jsPDF / JSZip yang
             // sudah termuat di index.html), jadi keduanya ditangani lewat jalur Blob
             // terpisah (langkah 4b) dan TIDAK melalui jalur string di bawah ini.
-            if (format === 'pdf' || format === 'zip') {
-                const blob = format === 'pdf'
-                    ? this._generatePdfBlob(notesArray, categoryMap)
-                    : await this._generateZipBlob(notesArray, categoryMap, timestamp);
-                fileName = `Catatan_Pintar_${timestamp}.${format}`;
-                mimeType = format === 'pdf' ? 'application/pdf' : 'application/zip';
-                const saveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
-                if (saveResult?.cancelled) {
-                    return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
+            if (format === 'pdf') {
+                const blob = this._generatePdfBlob(notesArray, categoryMap);
+                fileName = `Catatan_Pintar_${timestamp}.pdf`;
+                mimeType = 'application/pdf';
+                // Android memakai Save As yang sama dengan Word, tetapi data PDF
+                // dikirim sebagai Base64 agar byte biner tidak rusak saat ditulis.
+                if (Capacitor.isNativePlatform()) {
+                    const bytes = new Uint8Array(await blob.arrayBuffer());
+                    let binary = '';
+                    const chunkSize = 0x8000;
+                    for (let i = 0; i < bytes.length; i += chunkSize) {
+                        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+                    }
+                    const result = await FileExport.exportFile({
+                        fileName, data: btoa(binary), mimeType, isBase64: true
+                    });
+                    return { status: 'success', message: 'Ekspor berhasil.', result: { method: 'android-save-picker', location: result.uri || '' } };
                 }
+                const saveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
+                if (saveResult?.cancelled) return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
+                return { status: 'success', message: 'Ekspor berhasil.', result: saveResult };
+            }
+            if (format === 'zip') {
+                const blob = await this._generateZipBlob(notesArray, categoryMap, timestamp);
+                fileName = `Catatan_Pintar_${timestamp}.zip`;
+                mimeType = 'application/zip';
+                const saveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
+                if (saveResult?.cancelled) return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
                 return { status: 'success', message: 'Ekspor berhasil.', result: saveResult };
             }
 
