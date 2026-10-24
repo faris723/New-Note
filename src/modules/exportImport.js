@@ -195,8 +195,10 @@ export const ExportImportService = {
     // hanya jsPDF murni yang termuat di app ini (tanpa html2canvas), sehingga pendekatan
     // ini paling akurat dan tidak butuh pustaka tambahan.
     _generatePdfBlob(notesArray, categoryMap = {}) {
+        // jsPDF dimuat dari CDN pada web. APK/offline dapat gagal memuat CDN,
+        // jadi jangan gagalkan ekspor: gunakan generator PDF lokal minimal sebagai fallback.
         const jsPDFClass = window.jspdf?.jsPDF || window.jsPDF;
-        if (!jsPDFClass) throw new Error('Pustaka PDF (jsPDF) belum termuat. Coba muat ulang aplikasi.');
+        if (!jsPDFClass) return this._generateBasicPdfBlob(notesArray, categoryMap);
 
         const doc = new jsPDFClass({ unit: 'pt', format: 'a4' });
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -237,6 +239,71 @@ export const ExportImportService = {
         });
 
         return doc.output('blob');
+    },
+
+    // Fallback PDF mandiri: tidak membutuhkan CDN/library eksternal. Teks disimpan
+    // sebagai PDF standar dengan font Helvetica; karakter di luar WinAnsi ditransliterasi.
+    _generateBasicPdfBlob(notesArray, categoryMap = {}) {
+        const encoder = new TextEncoder();
+        const safe = (value) => String(value ?? '')
+            .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\x20-\x7E]/g, ' ')
+            .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+        const wrap = (text, max = 92) => {
+            const words = String(text || '').split(/\s+/);
+            const lines = []; let line = '';
+            for (const word of words) {
+                if (!word) continue;
+                if ((line + ' ' + word).trim().length > max && line) { lines.push(line); line = word; }
+                else line = (line ? line + ' ' : '') + word;
+            }
+            if (line) lines.push(line);
+            return lines.length ? lines : [''];
+        };
+        const lines = ['ARSIP CATATAN PINTAR', `Diekspor: ${new Date().toLocaleString('id-ID')} | ${notesArray.length} catatan`, ''];
+        notesArray.forEach((raw, i) => {
+            const n = this._getNoteFields(raw, categoryMap);
+            lines.push(`${i + 1}. ${n.title}`, `Kategori: ${n.category} | Tanggal: ${n.date}`, ...wrap(n.plainText), '');
+        });
+        const pages = []; let page = [];
+        for (const line of lines) { if (page.length >= 48) { pages.push(page); page = []; } page.push(line); }
+        if (page.length || !pages.length) pages.push(page);
+        const objects = [];
+        const addObj = (s) => { objects.push(s); return objects.length; };
+        const catalogId = addObj('');
+        const pagesId = addObj('');
+        const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+        const pageIds = [];
+        pages.forEach((pageLines) => {
+            let stream = 'BT\n/F1 10 Tf\n50 790 Td\n';
+            pageLines.forEach((line, idx) => {
+                if (idx) stream += '0 -15 Td\n';
+                stream += `(${safe(line)}) Tj\n`;
+            });
+            stream += 'ET';
+            const streamBytes = encoder.encode(stream).length;
+            const contentId = addObj(`<< /Length ${streamBytes} >>\nstream\n${stream}\nendstream`);
+            const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+            pageIds.push(pageId);
+        });
+        objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+        objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+        let pdf = '%PDF-1.4\n%CPFallback\n'; const offsets = [0];
+        objects.forEach((obj, i) => { offsets.push(encoder.encode(pdf).length); pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`; });
+        const xref = encoder.encode(pdf).length;
+        pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+        for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+        pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+        return new Blob([pdf], { type: 'application/pdf' });
+    },
+
+    async exportSingleNote(note, categories = []) {
+        try {
+            const result = await this.exportNotes([note], categories, 'pdf');
+            return result?.cancelled ? { success: false, cancelled: true } : { success: true, result: result?.result };
+        } catch (error) {
+            return { success: false, error: error?.message || 'Gagal mengekspor PDF.' };
+        }
     },
 
     // --- HELPER: Buat ZIP biner sungguhan dengan JSZip (sudah termuat via CDN) ---
