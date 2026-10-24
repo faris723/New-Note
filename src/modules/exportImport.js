@@ -98,18 +98,110 @@ function buildSimpleDocx(html) {
   return makeStoredZip([{name:'[Content_Types].xml',data:types},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml},{name:'word/styles.xml',data:styles},{name:'word/_rels/document.xml.rels',data:wrels}]);
 }
 
-function buildSimplePdf(notes = []) {
-  // PDF mandiri tanpa dependensi CDN. Setiap catatan dimulai pada halaman baru.
-  // Jika satu catatan panjang, catatan tersebut boleh berlanjut ke halaman berikutnya,
-  // tetapi catatan berikutnya selalu dimulai di halaman baru.
-  const encoder = new TextEncoder();
-  const clean = (value) => String(value ?? '')
-    .normalize('NFKD')
-    .replace(/[^\x20-\x7E\n\r\t]/g, '?')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)');
+/**
+ * Generator PDF Ekspor Catatan (v2 — ditulis ulang total).
+ * Jalur utama memakai jsPDF (sudah dimuat lewat CDN di index.html) untuk hasil
+ * yang rapi: kop halaman, kategori + ikon, blok keuangan berwarna, nomor halaman.
+ * Jika jsPDF karena suatu sebab tidak tersedia di runtime, dipakai penulis PDF
+ * mandiri (tanpa dependensi) sebagai jaring pengaman agar ekspor tetap berjalan.
+ */
+function findCategoryMeta(categories, categoryId) {
+  return (Array.isArray(categories) ? categories : []).find(c => c.id === categoryId) || null;
+}
 
+function financeLineFor(note) {
+  const f = note.finance;
+  if (!f || !f.amount) return null;
+  const label = f.type === 'income' ? 'Pemasukan' : f.type === 'debt' ? 'Hutang' : 'Pengeluaran';
+  return { label, amount: Number(f.amount) || 0, finance: f };
+}
+
+function buildNotesPdfWithJsPDF(jsPDF, notes, categories) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 18;
+  const contentW = pageW - margin * 2;
+  const MOSS = [71, 89, 63];
+  const INK = [43, 42, 36];
+  const INK_SOFT = [107, 104, 88];
+  const INCOME = [45, 106, 79];
+  const EXPENSE = [163, 64, 47];
+  const RULE = [216, 208, 187];
+
+  const sourceNotes = (Array.isArray(notes) ? notes : []).length ? notes : [{ title: 'Tidak ada catatan untuk diekspor.', bodyHTML: '' }];
+
+  sourceNotes.forEach((note, idx) => {
+    if (idx > 0) doc.addPage();
+    doc.setFillColor(...MOSS);
+    doc.rect(0, 0, pageW, 13, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.text('Catatan Pintar — Offline', margin, 8.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text(new Date().toLocaleString('id-ID'), pageW - margin, 8.5, { align: 'right' });
+
+    let y = 24;
+    doc.setTextColor(...INK);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.splitTextToSize(note.title || 'Tanpa Judul', contentW).forEach(line => { doc.text(line, margin, y); y += 7; });
+    y += 1;
+
+    const cat = findCategoryMeta(categories, note.category);
+    const dateStr = (note.updatedAt || note.createdAt) ? new Date(note.updatedAt || note.createdAt).toLocaleString('id-ID') : '';
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...INK_SOFT);
+    let metaLine = `${cat ? `${cat.icon || ''} ${cat.name}`.trim() : 'Umum'}${dateStr ? '  ·  ' + dateStr : ''}`;
+    if (note.isPinned) metaLine += '  ·  📌 Disematkan';
+    doc.text(metaLine, margin, y); y += 6;
+
+    const fin = financeLineFor(note);
+    if (fin) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5);
+      doc.setTextColor(...(fin.label === 'Pemasukan' ? INCOME : EXPENSE));
+      doc.text(`${fin.label}: Rp ${fin.amount.toLocaleString('id-ID')}`, margin, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...INK_SOFT);
+      if (fin.finance.type === 'debt' && fin.finance.debtTo) { doc.text(`Kepada: ${fin.finance.debtTo} (${fin.finance.debtPaid ? 'Lunas' : 'Belum lunas'})`, margin, y); y += 5; }
+      if (fin.finance.incomeFrom) { doc.text(`Sumber: ${fin.finance.incomeFrom}`, margin, y); y += 5; }
+      if (fin.finance.expenseFor) { doc.text(`Untuk: ${fin.finance.expenseFor}`, margin, y); y += 5; }
+    }
+
+    y += 2;
+    doc.setDrawColor(...RULE); doc.line(margin, y, pageW - margin, y); y += 6;
+
+    doc.setTextColor(...INK); doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+    const bodyText = SecurityService.stripHtml(note.bodyHTML || '').replace(/\u00a0/g, ' ').trim() || '(Catatan ini tidak memiliki isi teks.)';
+    doc.splitTextToSize(bodyText, contentW).forEach(line => {
+      if (y > pageH - 24) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y); y += 5.2;
+    });
+
+    const attachments = Array.isArray(note.attachments) ? note.attachments : [];
+    if (attachments.length) {
+      y += 3;
+      if (y > pageH - 30) { doc.addPage(); y = margin; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...INK);
+      doc.text('Lampiran:', margin, y); y += 5;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...INK_SOFT);
+      attachments.forEach((att, i) => {
+        if (y > pageH - 20) { doc.addPage(); y = margin; }
+        doc.text(`${i + 1}. ${att.name || 'berkas'}`, margin + 2, y); y += 5;
+      });
+    }
+  });
+
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 145, 130);
+    doc.text(`Halaman ${p} dari ${totalPages}`, pageW / 2, pageH - 10, { align: 'center' });
+  }
+  return doc.output('blob');
+}
+
+function buildFallbackPdf(notes = []) {
+  // Jaring pengaman tanpa dependensi, dipakai hanya jika jsPDF gagal dimuat.
+  const encoder = new TextEncoder();
+  const clean = (value) => String(value ?? '').normalize('NFKD').replace(/[^\x20-\x7E\n\r\t]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
   const wrap = (value, max = 88) => {
     const text = String(value ?? '').replace(/\r/g, '');
     if (!text) return [''];
@@ -119,10 +211,8 @@ function buildSimplePdf(notes = []) {
       let line = '';
       for (const word of raw.split(/\s+/)) {
         if (!word) continue;
-        if (word.length > max) {
-          if (line) { result.push(line); line = ''; }
-          for (let i = 0; i < word.length; i += max) result.push(word.slice(i, i + max));
-        } else if (!line) line = word;
+        if (word.length > max) { if (line) { result.push(line); line = ''; } for (let i = 0; i < word.length; i += max) result.push(word.slice(i, i + max)); }
+        else if (!line) line = word;
         else if ((line + ' ' + word).length <= max) line += ' ' + word;
         else { result.push(line); line = word; }
       }
@@ -130,86 +220,58 @@ function buildSimplePdf(notes = []) {
     }
     return result.length ? result : [''];
   };
-
   const maxLines = 45;
   const notePages = [];
   const sourceNotes = Array.isArray(notes) ? notes : [];
-
   for (let idx = 0; idx < sourceNotes.length; idx++) {
     const note = sourceNotes[idx] || {};
-    const title = String(note.title || 'Tanpa Judul');
-    const category = String(note.category || 'Umum');
     const date = note.updatedAt || note.createdAt ? new Date(note.updatedAt || note.createdAt).toLocaleString('id-ID') : '';
     const body = SecurityService.stripHtml(note.bodyHTML || '').replace(/\u00a0/g, ' ');
-    const lines = [
-      `${idx + 1}. ${title}`,
-      `Kategori: ${category}${date ? ` | Tanggal: ${date}` : ''}`,
-      ...(note.finance ? [`Keuangan: ${note.finance.type || ''} Rp ${Number(note.finance.amount || 0).toLocaleString('id-ID')}`] : []),
-      '',
-      ...wrap(body, 88)
-    ];
+    const lines = [`${idx + 1}. ${note.title || 'Tanpa Judul'}`, `Kategori: ${note.category || 'Umum'}${date ? ` | Tanggal: ${date}` : ''}`, ...(note.finance ? [`Keuangan: ${note.finance.type || ''} Rp ${Number(note.finance.amount || 0).toLocaleString('id-ID')}`] : []), '', ...wrap(body, 88)];
     const attachments = Array.isArray(note.attachments) ? note.attachments : [];
-    if (attachments.length) {
-      lines.push('', 'Lampiran:');
-      attachments.forEach((att, i) => lines.push(`${i + 1}. ${att.name || 'lampiran'}`));
-    }
-
+    if (attachments.length) { lines.push('', 'Lampiran:'); attachments.forEach((att, i) => lines.push(`${i + 1}. ${att.name || 'lampiran'}`)); }
     const pagesForNote = [];
-    for (let pos = 0; pos < lines.length || pos === 0; pos += maxLines) {
-      const chunk = lines.slice(pos, pos + maxLines);
-      if (!chunk.length) break;
-      pagesForNote.push(chunk);
-    }
+    for (let pos = 0; pos < lines.length || pos === 0; pos += maxLines) { const chunk = lines.slice(pos, pos + maxLines); if (!chunk.length) break; pagesForNote.push(chunk); }
     notePages.push(pagesForNote.length ? pagesForNote : [['']]);
   }
-
   if (!notePages.length) notePages.push([['Tidak ada catatan untuk diekspor.']]);
   const totalPages = notePages.reduce((sum, pages) => sum + pages.length, 0);
   const objs = [];
   const add = (value) => { objs.push(value); return objs.length; };
-  const catalogId = add(null);
-  const pagesId = add(null);
-  const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-  const pageIds = [];
-  const contentIds = [];
+  const catalogId = add(null), pagesId = add(null), fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pageIds = [], contentIds = [];
   let pageNo = 0;
-
-  for (let noteIdx = 0; noteIdx < notePages.length; noteIdx++) {
-    const pages = notePages[noteIdx];
-    for (let part = 0; part < pages.length; part++) {
-      const chunk = pages[part];
+  for (const pages of notePages) {
+    for (const chunk of pages) {
       pageNo += 1;
-      const body = [];
-      body.push(`BT /F1 12 Tf 50 800 Td (${clean(chunk[0] || 'Catatan')}) Tj ET`);
-      for (let i = 1; i < chunk.length; i++) {
-        body.push(`BT /F1 10 Tf 50 ${780 - (i - 1) * 16} Td (${clean(chunk[i])}) Tj ET`);
-      }
+      const body = [`BT /F1 12 Tf 50 800 Td (${clean(chunk[0] || 'Catatan')}) Tj ET`];
+      for (let i = 1; i < chunk.length; i++) body.push(`BT /F1 10 Tf 50 ${780 - (i - 1) * 16} Td (${clean(chunk[i])}) Tj ET`);
       body.push(`BT /F1 8 Tf 50 28 Td (Halaman ${pageNo} dari ${totalPages}) Tj ET`);
       const stream = body.join('\n');
       const contentId = add(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream`);
-      const pageId = add(null);
-      contentIds.push(contentId);
-      pageIds.push(pageId);
+      contentIds.push(contentId); pageIds.push(add(null));
     }
   }
-
-  for (let i = 0; i < pageIds.length; i++) {
-    objs[pageIds[i] - 1] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
-  }
+  for (let i = 0; i < pageIds.length; i++) objs[pageIds[i] - 1] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
   objs[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
   objs[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
-
   let output = '%PDF-1.4\n%CatatanPintar\n';
   const offsets = [0];
-  for (let i = 0; i < objs.length; i++) {
-    offsets.push(encoder.encode(output).length);
-    output += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`;
-  }
+  for (let i = 0; i < objs.length; i++) { offsets.push(encoder.encode(output).length); output += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`; }
   const xref = encoder.encode(output).length;
   output += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
   for (let i = 1; i <= objs.length; i++) output += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
   output += `trailer\n<< /Size ${objs.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([encoder.encode(output)], { type: 'application/pdf' });
+}
+
+function buildNotesPdf(notes, categories) {
+  const jsPDFClass = window.jspdf?.jsPDF || window.jsPDF;
+  if (jsPDFClass) {
+    try { return buildNotesPdfWithJsPDF(jsPDFClass, notes, categories); }
+    catch (e) { console.warn('Render PDF via jsPDF gagal, memakai PDF cadangan:', e); }
+  }
+  return buildFallbackPdf(notes);
 }
 
 async function buildPortableNotes(notes = []) {
@@ -356,12 +418,29 @@ export const ExportImportService = {
     }
 
     if (format === 'pdf') {
-      const blob = buildSimplePdf(notes);
+      const blob = buildNotesPdf(notes, categories);
       const result = await AttachmentService.saveOrDownloadBlob(blob, `CatatanPintar_Dokumen_${dateStr}.pdf`, 'application/pdf');
       return { success: result?.success !== false, cancelled: !!result?.cancelled, count: notes.length, result };
     }
 
     return { success: false, error: 'Format ekspor tidak dikenal' };
+  },
+
+  /**
+   * Ekspor satu catatan yang sedang dibuka di editor menjadi satu berkas PDF.
+   * Dipakai oleh tombol "Unduh PDF" pada layar sunting catatan.
+   */
+  async exportSingleNote(note, categories = []) {
+    if (!note || typeof note !== 'object') {
+      return { success: false, error: 'Catatan tidak ditemukan.' };
+    }
+    // PDF hanya menampilkan nama berkas lampiran (bukan isinya), jadi catatan
+    // asli sudah cukup — tidak perlu membaca ulang data biner tiap lampiran.
+    const blob = buildNotesPdf([note], categories);
+    const dateStr = localDateTag(new Date());
+    const safeTitle = SecurityService.sanitizeFileName(note.title || 'Catatan');
+    const result = await AttachmentService.saveOrDownloadBlob(blob, `${safeTitle}_${dateStr}.pdf`, 'application/pdf');
+    return { success: result?.success !== false, cancelled: !!result?.cancelled, result };
   },
 
   /**
