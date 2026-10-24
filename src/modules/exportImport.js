@@ -1,189 +1,293 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { AttachmentService } from './attachment.js';
 const FileExport = registerPlugin('FileExport');
 
-// Helper untuk memuat library JSZip (ZIP) dan html2pdf (PDF) secara dinamis
-async function loadExternalLibrary(url, globalVarName) {
-    if (window[globalVarName]) return window[globalVarName];
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = url;
-        script.onload = () => resolve(window[globalVarName]);
-        script.onerror = () => reject(new Error(`Gagal memuat modul ${globalVarName}`));
-        document.head.appendChild(script);
-    });
-}
-
 export const ExportImportService = {
-    
-    async exportNotes(dataCatatan, formatParam = 'json') {
+
+    async exportNotes(dataCatatan, categoriesParam, formatParam = 'json') {
         try {
             // 1. PENDETEKSI FORMAT YANG AMAN
-            // Kita TIDAK LAGI men-stringify seluruh objek event untuk mencegah error 'document' -> 'doc'
             let format = 'json';
-            
+
             if (typeof formatParam === 'string') {
                 format = formatParam.toLowerCase();
             } else if (formatParam && typeof formatParam === 'object') {
-                const target = formatParam.target || formatParam.currentTarget;
-                if (target) {
-                    const val = (target.dataset && target.dataset.format) || target.value || target.innerText || target.textContent || '';
-                    const text = val.toLowerCase();
-                    if (text.includes('pdf')) format = 'pdf';
-                    else if (text.includes('zip')) format = 'zip';
-                    else if (text.includes('doc') || text.includes('word')) format = 'doc';
-                    else if (text.includes('txt')) format = 'txt';
-                } else if (formatParam.format) {
-                    format = formatParam.format.toLowerCase();
+                // Mencari dari atribut data standar tanpa mengubah keseluruhan objek
+                if (formatParam.detail && typeof formatParam.detail === 'string') {
+                    format = formatParam.detail.toLowerCase();
+                } else if (formatParam.target && formatParam.target.dataset && formatParam.target.dataset.format) {
+                    format = formatParam.target.dataset.format.toLowerCase();
+                } else if (formatParam.value && typeof formatParam.value === 'string') {
+                    format = formatParam.value.toLowerCase();
                 }
             }
 
-            // Fallback terakhir jika format masih tidak dikenali
+            // Alias: opsi tampilan "Dokumen Word (.docx)" mengirim value="word"
+            if (format === 'word' || format === 'docx') format = 'doc';
+
+            // Validasi format akhir, fallback ke json jika tidak dikenali
             if (!['json', 'txt', 'doc', 'pdf', 'zip'].includes(format)) {
                 format = 'json';
             }
 
-            console.log(`Mengekspor dengan format final: ${format}`);
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            
-            let fileName = `Catatan_Pintar_${timestamp}.${format}`;
-            let stringData = '';
-            let isBase64 = false;
-            let mimeType = 'text/plain';
-
-            // 2. KEMBALI KE LOGIKA TARIK DATA LAMA YANG SUDAH BERHASIL
-            let catatanArray = Array.isArray(dataCatatan) ? dataCatatan : (dataCatatan.notes || [dataCatatan]);
-
-            // 3. ENGINE KONVERSI
-            if (format === 'json') {
-                // Konversi standar JSON (SUDAH BERHASIL)
-                stringData = JSON.stringify(dataCatatan, null, 2);
-                mimeType = 'application/json';
-            } 
-            else if (format === 'txt') {
-                // Konversi standar TXT (SUDAH BERHASIL)
-                stringData = this._convertToText(catatanArray);
-                mimeType = 'text/plain';
-            } 
-            else if (format === 'doc') {
-                // Konversi standar Word/Doc (SUDAH BERHASIL)
-                stringData = this._convertToHTML(catatanArray);
-                mimeType = 'application/msword';
-            } 
-            else if (format === 'zip') {
-                // GENERATE ZIP ASLI
-                const JSZip = await loadExternalLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
-                const zip = new JSZip();
-                
-                catatanArray.forEach((note, i) => {
-                    const title = (note.title || note.judul || `Catatan_${i+1}`).replace(/[^a-z0-9]/gi, '_');
-                    const category = note.category || note.kategori || 'Umum';
-                    const date = note.date || note.createdAt || note.tanggal || '-';
-                    const content = note.content || note.text || note.isi || note.catatan || '';
-                    
-                    zip.file(`${title}.txt`, `Judul: ${title}\nKategori: ${category}\nTanggal: ${date}\n\n${content}`);
+            // 2. PETA ID -> NAMA KATEGORI (supaya hasil ekspor menampilkan nama asli, bukan id mentah)
+            const categoryMap = {};
+            if (Array.isArray(categoriesParam)) {
+                categoriesParam.forEach(c => {
+                    if (c && c.id) categoryMap[c.id] = c.name || c.id;
                 });
-                
-                stringData = await zip.generateAsync({ type: 'base64' });
-                isBase64 = true;
-                mimeType = 'application/zip';
-            } 
-            else if (format === 'pdf') {
-                // GENERATE PDF ASLI
-                const html2pdf = await loadExternalLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', 'html2pdf');
-                const htmlContent = this._convertToHTML(catatanArray);
-                
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = htmlContent;
-                
-                const opt = {
-                    margin:       10,
-                    filename:     fileName,
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2 },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
-
-                const pdfBase64 = await html2pdf().set(opt).from(tempDiv).outputPdf('datauristring');
-                stringData = pdfBase64.split(',')[1]; // Ambil data biner base64-nya saja
-                isBase64 = true;
-                mimeType = 'application/pdf';
             }
 
-            // 4. EKSEKUSI PENYIMPANAN
+            console.log(`Format final yang akan diekspor: ${format}`);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            let stringData = '';
+            let fileName = `Catatan_Pintar_${timestamp}.${format}`;
+            let mimeType = 'text/plain';
+
+            // 3. NORMALISASI DATA (Mencegah file kosong)
+            let notesArray = [];
+            if (Array.isArray(dataCatatan)) {
+                notesArray = dataCatatan;
+            } else if (dataCatatan && Array.isArray(dataCatatan.notes)) {
+                notesArray = dataCatatan.notes;
+            } else if (dataCatatan && Array.isArray(dataCatatan.data)) {
+                notesArray = dataCatatan.data;
+            } else if (dataCatatan && typeof dataCatatan === 'object') {
+                notesArray = [dataCatatan];
+            }
+
+            // 4. ENGINE KONVERSI
+            // PDF dan ZIP menghasilkan berkas BINER sungguhan (lewat jsPDF / JSZip yang
+            // sudah termuat di index.html), jadi keduanya ditangani lewat jalur Blob
+            // terpisah (langkah 4b) dan TIDAK melalui jalur string di bawah ini.
+            if (format === 'pdf' || format === 'zip') {
+                const blob = format === 'pdf'
+                    ? this._generatePdfBlob(notesArray, categoryMap)
+                    : await this._generateZipBlob(notesArray, categoryMap, timestamp);
+                fileName = `Catatan_Pintar_${timestamp}.${format}`;
+                mimeType = format === 'pdf' ? 'application/pdf' : 'application/zip';
+                const saveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
+                if (saveResult?.cancelled) {
+                    return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
+                }
+                return { status: 'success', message: 'Ekspor berhasil.', result: saveResult };
+            }
+
+            if (format === 'json') {
+                stringData = JSON.stringify(notesArray, null, 2);
+                fileName = `Catatan_Pintar_${timestamp}.json`;
+                mimeType = 'application/json';
+            }
+            else if (format === 'txt') {
+                stringData = this._convertToText(notesArray, categoryMap);
+                mimeType = 'text/plain';
+            }
+            else if (format === 'doc') {
+                stringData = this._convertToHTML(notesArray, categoryMap);
+                fileName = `Catatan_Pintar_${timestamp}.doc`;
+                mimeType = 'application/msword';
+            }
+
+            // 5. EKSEKUSI PENYIMPANAN (format berbasis teks: json/txt/doc)
             if (Capacitor.isNativePlatform()) {
-                const result = await FileExport.exportFile({
-                    fileName: fileName,
-                    data: stringData,
-                    mimeType: mimeType,
-                    isBase64: isBase64 // Disambungkan ke plugin Java Anda
-                });
-                if (!result.success) throw new Error('Plugin native gagal merespons.');
-                return { status: 'success', message: 'Ekspor berhasil disimpan.' };
+                return await this._exportNative(stringData, fileName, mimeType);
             } else {
-                // Eksekusi jika dijalankan via Web/Browser
-                const finalData = isBase64 ? this._base64ToBlob(stringData, mimeType) : new Blob([stringData], { type: mimeType });
-                const url = URL.createObjectURL(finalData);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-                return { status: 'success', message: 'Ekspor berhasil disimpan.' };
+                return await this._exportWeb(stringData, fileName, mimeType);
             }
 
         } catch (error) {
             console.error("Proses ekspor gagal:", error);
-            if (error.message === 'USER_CANCELLED') throw new Error('Ekspor dibatalkan.');
+            if (error.message === 'USER_CANCELLED') {
+                // Dibatalkan pengguna bukan kegagalan — kembalikan status, jangan lempar error,
+                // supaya UI bisa menampilkan pesan netral alih-alih pesan "Gagal ekspor" berwarna merah.
+                return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
+            }
             throw new Error('Gagal mengekspor data: ' + error.message);
         }
     },
 
-    // --- HELPER KONVERSI ---
-    _convertToText(notesArray) {
-        let text = "=== ARSIP CATATAN PINTAR ===\n\n";
-        notesArray.forEach((note, index) => {
-            const title = note.title || note.judul || note.name || 'Tanpa Judul';
-            const category = note.category || note.kategori || '-';
-            const date = note.date || note.createdAt || note.tanggal || '-';
-            const content = note.content || note.text || note.isi || note.catatan || '(Tidak ada isi catatan)';
+    // --- HELPER: Pengekstrak Data Fleksibel ---
+    _getNoteFields(note, categoryMap = {}) {
+        const rawCategoryId = note.category || note.kategori || '';
+        const categoryName = (rawCategoryId && categoryMap[rawCategoryId]) || rawCategoryId || 'Umum';
+        // Field isi catatan yang sebenarnya adalah bodyHTML (berisi HTML dari editor).
+        // Nama-nama lain tetap dicoba sebagai fallback untuk sumber data lama/lain.
+        const rawHtml = note.bodyHTML || note.content || note.text || note.isi || note.body || note.catatan || '';
+        return {
+            title: note.title || note.judul || note.name || 'Tanpa Judul',
+            category: categoryName,
+            date: note.date || note.createdAt || note.tanggal || new Date().toLocaleDateString(),
+            bodyHTML: rawHtml || '<p>(Tidak ada isi catatan)</p>',
+            plainText: this._htmlToPlainText(rawHtml) || '(Tidak ada isi catatan)'
+        };
+    },
 
-            text += `Catatan #${index + 1}\nJudul    : ${title}\nKategori : ${category}\nTanggal  : ${date}\n--------------------------------------\n${content}\n======================================\n\n`;
+    // --- HELPER: HTML -> teks polos (untuk ekspor .txt) ---
+    _htmlToPlainText(html) {
+        if (!html) return '';
+        try {
+            const doc = new DOMParser().parseFromString(String(html), 'text/html');
+            return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+        } catch (e) {
+            return String(html).replace(/<[^>]*>/g, ' ').trim();
+        }
+    },
+
+    // --- HELPER: Escape teks untuk disisipkan ke HTML ---
+    _escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
+    },
+
+    // --- HELPER: Konversi ke Text ---
+    _convertToText(notesArray, categoryMap = {}) {
+        let text = "=== ARSIP CATATAN PINTAR ===\n\n";
+        notesArray.forEach((n, index) => {
+            const note = this._getNoteFields(n, categoryMap);
+            text += `Catatan #${index + 1}\n`;
+            text += `Judul    : ${note.title}\n`;
+            text += `Kategori : ${note.category}\n`;
+            text += `Tanggal  : ${note.date}\n`;
+            text += `--------------------------------------\n`;
+            text += `${note.plainText}\n`;
+            text += `======================================\n\n`;
         });
         return text;
     },
 
-    _convertToHTML(notesArray) {
-        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Arsip Catatan Pintar</title><style>body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; color: #333; } .note { border-bottom: 2px solid #ccc; margin-bottom: 20px; padding-bottom: 20px; } .title { color: #2e7d32; margin-bottom: 5px; } .meta { font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px; } .content { white-space: pre-wrap; }</style></head><body><h1 style="text-align: center;">Arsip Catatan Pintar</h1><hr><br>`;
-        
-        notesArray.forEach((note) => {
-            const title = note.title || note.judul || note.name || 'Tanpa Judul';
-            const category = note.category || note.kategori || '-';
-            const date = note.date || note.createdAt || note.tanggal || '-';
-            const content = note.content || note.text || note.isi || note.catatan || '(Tidak ada isi catatan)';
+    // --- HELPER: Konversi ke HTML (Untuk Doc dan PDF fallback) ---
+    _convertToHTML(notesArray, categoryMap = {}) {
+        let html = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Arsip Catatan Pintar</title>
+            <style>
+                body { font-family: sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+                .note { border-bottom: 2px solid #ccc; margin-bottom: 20px; padding-bottom: 20px; }
+                .title { color: #2e7d32; margin-bottom: 5px; }
+                .meta { font-size: 0.9em; color: #666; margin-top: 0; margin-bottom: 15px; }
+                .content { white-space: pre-wrap; }
+            </style>
+        </head>
+        <body>
+            <h1 style="text-align: center;">Arsip Catatan Pintar</h1>
+            <hr><br>
+        `;
 
-            html += `<div class="note"><h2 class="title">${title}</h2><p class="meta">Kategori: ${category} | Tanggal: ${date}</p><div class="content">${content}</div></div>`;
+        notesArray.forEach((n) => {
+            const note = this._getNoteFields(n, categoryMap);
+            html += `
+            <div class="note">
+                <h2 class="title">${this._escapeHtml(note.title)}</h2>
+                <p class="meta">Kategori: ${this._escapeHtml(note.category)} | Tanggal: ${this._escapeHtml(String(note.date))}</p>
+                <div class="content">${note.bodyHTML}</div>
+            </div>
+            `;
         });
         html += "</body></html>";
         return html;
     },
 
-    // Helper Web untuk data biner (PDF/ZIP)
-    _base64ToBlob(base64, mimeType) {
-        const byteCharacters = atob(base64);
-        const byteArrays = [];
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-            const slice = byteCharacters.slice(offset, offset + 512);
-            const byteNumbers = new Array(slice.length);
-            for (let i = 0; i < slice.length; i++) {
-                byteNumbers[i] = slice.charCodeAt(i);
-            }
-            byteArrays.push(new Uint8Array(byteNumbers));
+    // --- HELPER: Buat PDF biner sungguhan dengan jsPDF (sudah termuat via CDN) ---
+    // Dirender sebagai teks tersusun rapi (bukan rendering HTML pixel-perfect) karena
+    // hanya jsPDF murni yang termuat di app ini (tanpa html2canvas), sehingga pendekatan
+    // ini paling akurat dan tidak butuh pustaka tambahan.
+    _generatePdfBlob(notesArray, categoryMap = {}) {
+        const jsPDFClass = window.jspdf?.jsPDF || window.jsPDF;
+        if (!jsPDFClass) throw new Error('Pustaka PDF (jsPDF) belum termuat. Coba muat ulang aplikasi.');
+
+        const doc = new jsPDFClass({ unit: 'pt', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const marginX = 42;
+        const maxWidth = pageWidth - marginX * 2;
+        let y = 56;
+
+        const ensureSpace = (needed) => {
+            if (y + needed > pageHeight - 40) { doc.addPage(); y = 56; }
+        };
+
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+        doc.text('Arsip Catatan Pintar', pageWidth / 2, y, { align: 'center' });
+        y += 18;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120);
+        doc.text(`Diekspor: ${new Date().toLocaleString('id-ID')} · ${notesArray.length} catatan`, pageWidth / 2, y, { align: 'center' });
+        y += 26;
+
+        notesArray.forEach((n) => {
+            const note = this._getNoteFields(n, categoryMap);
+            ensureSpace(40);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(30);
+            const titleLines = doc.splitTextToSize(note.title, maxWidth);
+            titleLines.forEach((line) => { ensureSpace(14); doc.text(line, marginX, y); y += 14; });
+
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(110);
+            doc.text(`Kategori: ${note.category}  |  Tanggal: ${note.date}`, marginX, y);
+            y += 16;
+
+            doc.setFontSize(10); doc.setTextColor(35);
+            const bodyLines = doc.splitTextToSize(note.plainText, maxWidth);
+            bodyLines.forEach((line) => { ensureSpace(13); doc.text(line, marginX, y); y += 13; });
+
+            y += 10; ensureSpace(8);
+            doc.setDrawColor(222); doc.line(marginX, y, marginX + maxWidth, y);
+            y += 20;
+        });
+
+        return doc.output('blob');
+    },
+
+    // --- HELPER: Buat ZIP biner sungguhan dengan JSZip (sudah termuat via CDN) ---
+    // Berisi backup JSON penuh (untuk impor ulang) + ringkasan TXT yang mudah dibaca manusia.
+    async _generateZipBlob(notesArray, categoryMap = {}, timestamp) {
+        if (!window.JSZip) throw new Error('Pustaka ZIP (JSZip) belum termuat. Coba muat ulang aplikasi.');
+        const zip = new window.JSZip();
+        zip.file(`Catatan_Pintar_${timestamp}_backup.json`, JSON.stringify(notesArray, null, 2));
+        zip.file(`Catatan_Pintar_${timestamp}_ringkasan.txt`, this._convertToText(notesArray, categoryMap));
+        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    },
+
+    async _exportWeb(stringData, fileName, mimeType) {
+        const blob = new Blob([stringData], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+        return { status: 'success', message: 'Ekspor berhasil.', result: { method: 'blob-download' } };
+    },
+
+    async _exportNative(stringData, fileName, mimeType) {
+        const result = await FileExport.exportFile({
+            fileName: fileName,
+            data: stringData,
+            mimeType: mimeType
+        });
+
+        if (result.success) {
+            return {
+                status: 'success',
+                message: 'Ekspor berhasil.',
+                result: { method: 'android-save-picker', location: result.uri || '' }
+            };
+        } else {
+            throw new Error('Plugin native gagal merespons.');
         }
-        return new Blob(byteArrays, { type: mimeType });
     },
 
     async importNotes() {
-        return { status: 'success', data: null };
+        try {
+            return { status: 'success', data: null };
+        } catch (error) {
+            throw new Error("Terjadi kesalahan saat mengimpor.");
+        }
     }
 };
