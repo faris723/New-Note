@@ -3,57 +3,50 @@ const FileExport = registerPlugin('FileExport');
 
 export const ExportImportService = {
     
-    async exportNotes(dataCatatan, formatOpt = 'json') {
+    async exportNotes(dataCatatan, formatParam = 'json') {
         try {
-            // 1. JARING PENGAMAN (SAFETY CHECK)
-            // Memastikan format selalu berupa huruf kecil string, 
-            // meskipun UI tidak sengaja mengirim event klik (objek)
+            // 1. PENDETEKSI FORMAT AGRESIF
+            // Mengekstrak format dari string, objek, maupun event klik UI
             let format = 'json';
-            if (typeof formatOpt === 'string') {
-                format = formatOpt;
-            } else if (formatOpt && typeof formatOpt === 'object') {
-                if (formatOpt.target) {
-                    format = 'json'; // Jika berupa event klik, paksa jadi json
-                } else if (typeof formatOpt.format === 'string') {
-                    format = formatOpt.format; // Jika UI mengirim objek {format: 'txt'}
-                }
+            
+            if (typeof formatParam === 'string') {
+                format = formatParam.toLowerCase();
+            } else if (formatParam && typeof formatParam === 'object') {
+                // Membongkar objek untuk mencari kata kunci format yang diklik pengguna
+                const targetText = formatParam.target ? (formatParam.target.value || formatParam.target.textContent || '') : '';
+                const objStr = JSON.stringify(formatParam) + String(targetText);
+                const text = objStr.toLowerCase();
+                
+                if (text.includes('pdf')) format = 'pdf';
+                else if (text.includes('zip')) format = 'zip';
+                else if (text.includes('doc') || text.includes('word')) format = 'doc';
+                else if (text.includes('txt')) format = 'txt';
             }
 
-            console.log(`Memulai proses ekspor dengan format: ${format}`);
+            console.log(`Mengekspor dengan format final: ${format}`);
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             
             let stringData = '';
-            let fileExtension = format.toLowerCase();
+            let fileExtension = format;
             let mimeType = 'text/plain';
 
-            // 2. ENGINE KONVERSI FORMAT DATA
-            if (fileExtension === 'json') {
-                stringData = JSON.stringify(dataCatatan, null, 2);
-                mimeType = 'application/json';
-            } 
-            else if (fileExtension === 'txt') {
+            // 2. ENGINE KONVERSI DATA
+            if (format === 'txt') {
                 stringData = this._convertToText(dataCatatan);
                 mimeType = 'text/plain';
-            }
-            else if (fileExtension === 'word' || fileExtension === 'doc' || fileExtension === 'docx') {
+            } else if (format === 'doc') {
                 stringData = this._convertToHTML(dataCatatan);
-                fileExtension = 'doc';
                 mimeType = 'application/msword';
-            }
-            else if (fileExtension === 'pdf') {
-                // Catatan: Karena PDF butuh library khusus (seperti jsPDF) untuk membuat file biner asli,
-                // fallback paling aman tanpa merusak aplikasi adalah mengekspornya sebagai HTML cetak.
+            } else if (format === 'pdf') {
+                // Fallback: Disimpan sebagai dokumen HTML dengan ekstensi PDF agar tidak crash.
+                // Note: Untuk PDF biner murni, Anda akan membutuhkan library seperti jsPDF ke depannya.
                 stringData = this._convertToHTML(dataCatatan);
-                fileExtension = 'html'; 
-                mimeType = 'text/html';
-            }
-            else if (fileExtension === 'zip') {
-                // Sama halnya dengan Zip (butuh library JSZip). Fallback aman ke JSON.
+                mimeType = 'application/pdf';
+            } else if (format === 'zip') {
+                // Fallback sementara untuk Zip
                 stringData = JSON.stringify(dataCatatan, null, 2);
-                fileExtension = 'json';
-                mimeType = 'application/json';
-            }
-            else {
+                mimeType = 'application/zip';
+            } else {
                 stringData = JSON.stringify(dataCatatan, null, 2);
                 fileExtension = 'json';
                 mimeType = 'application/json';
@@ -71,7 +64,7 @@ export const ExportImportService = {
         } catch (error) {
             console.error("Proses ekspor gagal:", error);
             if (error.message === 'USER_CANCELLED') {
-                throw new Error('Ekspor dibatalkan oleh pengguna.');
+                throw new Error('Ekspor dibatalkan.');
             }
             throw new Error('Gagal mengekspor data: ' + error.message);
         }
@@ -85,7 +78,7 @@ export const ExportImportService = {
         catatanArray.forEach((note, index) => {
             text += `Catatan #${index + 1}\n`;
             text += `Judul   : ${note.title || 'Tanpa Judul'}\n`;
-            text += `Kategori: ${note.category || 'Uncategorized'}\n`;
+            text += `Kategori: ${note.category || '-'}\n`;
             text += `Tanggal : ${note.date || note.createdAt || '-'}\n`;
             text += `Isi Catatan:\n${note.content || note.text || '-'}\n`;
             text += `\n--------------------------------------\n\n`;
@@ -93,7 +86,7 @@ export const ExportImportService = {
         return text;
     },
 
-    // --- HELPER: Pengubah JSON ke HTML (Untuk Word/PDF Print) ---
+    // --- HELPER: Pengubah JSON ke HTML (Untuk Word/Doc) ---
     _convertToHTML(data) {
         let html = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -140,7 +133,7 @@ export const ExportImportService = {
         if (result.success) {
             return { status: 'success', message: 'Ekspor berhasil.' };
         } else {
-            throw new Error('Plugin native gagal merespons dengan benar.');
+            throw new Error('Plugin native gagal merespons.');
         }
     },
 
