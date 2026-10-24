@@ -19,18 +19,19 @@ public class FileExportPlugin extends Plugin {
 
     @PluginMethod
     public void exportFile(PluginCall call) {
-        String fileName = call.getString("fileName", "catatan_pintar_backup.json");
+        String fileName = call.getString("fileName", "Catatan_Pintar.txt");
+        // Terima MIME type dari JavaScript, default ke teks biasa jika kosong
+        String mimeType = call.getString("mimeType", "text/plain"); 
         
-        // Simpan state 'call' agar tidak dihancurkan oleh memori saat dialog OS terbuka
         call.setKeepAlive(true); 
 
-        // Menggunakan Storage Access Framework (SAF) untuk meminta izin buat file
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/json"); 
+        
+        // Atur tipe file secara dinamis berdasarkan pilihan pengguna
+        intent.setType(mimeType); 
         intent.putExtra(Intent.EXTRA_TITLE, fileName);
 
-        // Panggil activity dan arahkan hasilnya ke fungsi saveFileResult
         startActivityForResult(call, intent, "saveFileResult");
     }
 
@@ -43,7 +44,6 @@ public class FileExportPlugin extends Plugin {
                 String dataToWrite = call.getString("data", "");
 
                 try {
-                    // Gunakan ContentResolver untuk menulis ke URI yang diizinkan sistem
                     ParcelFileDescriptor pfd = getContext().getContentResolver().openFileDescriptor(uri, "w");
                     FileOutputStream fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
                     fileOutputStream.write(dataToWrite.getBytes());
@@ -61,7 +61,6 @@ public class FileExportPlugin extends Plugin {
                 call.reject("URI file tidak ditemukan.");
             }
         } else {
-            // Ini akan memicu blok catch() di JavaScript dan menampilkan "Ekspor dibatalkan"
             call.reject("USER_CANCELLED");
         }
     }
