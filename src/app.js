@@ -2070,6 +2070,31 @@ function bindEventListeners() {
   el.financeTo.onchange = updateFinanceView;
   el.exportFinanceBtn.onclick = () => FeaturePackService.exportFinance();
 
+  // Ekspor satu catatan yang sedang dibuka di editor menjadi PDF
+  el.exportNoteBtn.onclick = async () => {
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) {
+      UIService.showToast('Simpan catatan terlebih dahulu sebelum mengekspor.', 'danger');
+      return;
+    }
+    el.exportNoteBtn.disabled = true;
+    const originalLabel = el.exportNoteBtn.textContent;
+    el.exportNoteBtn.textContent = '⏳ Membuat PDF…';
+    try {
+      const result = await ExportImportService.exportSingleNote(note, categories);
+      if (result.success) {
+        UIService.showToast('Catatan berhasil diekspor sebagai PDF.', 'info');
+      } else if (!result.cancelled) {
+        UIService.showToast(result.error || 'Gagal mengekspor catatan.', 'danger');
+      }
+    } catch (err) {
+      UIService.showToast(err.message || 'Gagal mengekspor catatan.', 'danger');
+    } finally {
+      el.exportNoteBtn.disabled = false;
+      el.exportNoteBtn.textContent = originalLabel;
+    }
+  };
+
   // Export Modal
   el.exportMainBtn.onclick = () => {
     const targets = isSelectMode && selectedNoteIds.size > 0 ? notes.filter(n => selectedNoteIds.has(n.id)) : notes;
