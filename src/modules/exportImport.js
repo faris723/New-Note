@@ -440,6 +440,67 @@ export const ExportImportService = {
         }
     },
 
+    // Membaca format backup yang benar-benar dihasilkan aplikasi: JSON utama
+    // berupa array catatan, envelope backup versi baru, dan backup finance-v2.
+    async parseBackupFile(file) {
+        if (!file || typeof file.text !== 'function') throw new Error('Berkas cadangan tidak dapat dibaca.');
+        const rawText = await file.text();
+        if (!rawText || !rawText.trim()) throw new Error('Berkas JSON kosong.');
+        let parsed;
+        try { parsed = JSON.parse(rawText.replace(/^\uFEFF/, '').trim()); }
+        catch (_) { throw new Error('Format JSON tidak valid atau berkas rusak.'); }
+
+        // Ekspor JSON utama saat ini menghasilkan array catatan langsung.
+        if (Array.isArray(parsed)) {
+            if (!parsed.every(item => item && typeof item === 'object' && !Array.isArray(item))) {
+                throw new Error('Struktur daftar catatan di dalam JSON tidak valid.');
+            }
+            return { notes: parsed, categories: [], count: parsed.length, financeState: null };
+        }
+        if (!parsed || typeof parsed !== 'object') throw new Error('Struktur cadangan JSON tidak dikenali.');
+
+        // Backup keuangan memakai backupFormat=finance-v2 dan properti transactions.
+        if (parsed.backupFormat === 'finance-v2' || (Array.isArray(parsed.transactions) && ('obligations' in parsed || 'savings' in parsed))) {
+            const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+            const notes = transactions.map((tx, index) => {
+                const sourceFinance = tx.finance && typeof tx.finance === 'object' ? tx.finance : {};
+                const type = tx.type || sourceFinance.type || 'expense';
+                const amount = Number(tx.amount ?? sourceFinance.amount ?? 0) || 0;
+                const date = tx.date || sourceFinance.date || new Date().toISOString().slice(0, 10);
+                return {
+                    ...tx,
+                    id: tx.id || `finance_import_${Date.now()}_${index}`,
+                    title: tx.title || tx.judul || 'Transaksi keuangan',
+                    category: 'keuangan',
+                    createdAt: tx.createdAt || Date.now(),
+                    finance: { ...sourceFinance, type, amount, date }
+                };
+            });
+            return {
+                notes, categories: [], count: notes.length,
+                financeState: {
+                    obligations: Array.isArray(parsed.obligations) ? parsed.obligations : [],
+                    savings: Array.isArray(parsed.savings) ? parsed.savings : [],
+                    history: Array.isArray(parsed.history) ? parsed.history : []
+                }
+            };
+        }
+
+        // Format envelope untuk backup penuh yang membawa metadata dan data pendukung.
+        const notes = Array.isArray(parsed.notes) ? parsed.notes : (Array.isArray(parsed.data) ? parsed.data : null);
+        if (!notes) throw new Error('JSON tidak berisi daftar catatan atau transaksi yang dapat diimpor.');
+        if (!notes.every(item => item && typeof item === 'object' && !Array.isArray(item))) {
+            throw new Error('Ada data catatan yang formatnya tidak valid.');
+        }
+        const financeState = parsed.financeState && typeof parsed.financeState === 'object' ? parsed.financeState : null;
+        return {
+            notes,
+            categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+            count: notes.length,
+            financeState
+        };
+    },
+
     async importNotes() {
         try {
             return { status: 'success', data: null };
