@@ -8,6 +8,7 @@
  * - editor catatan lama tetap dipakai untuk mengubah data yang sudah ada;
  * - UI dibuat idempotent supaya aman bila init dipanggil ulang.
  */
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { ImageEditorService } from './imageEditor.js';
 import { SecurityService } from './security.js';
 import { APP_VERSION } from '../version.js';
@@ -15,6 +16,9 @@ import { AttachmentService } from './attachment.js';
 import { FinancePdfReportService } from './financePdfReport.js';
 import { StorageService } from './storage.js';
 import { ExportImportService } from './exportImport.js';
+
+// Gunakan plugin penyimpanan native yang sama dengan ekspor PDF utama.
+const FileExport = registerPlugin('FileExport');
 
 const OBL_KEY = 'cp_obligations_v2';
 const SAV_KEY = 'cp_savings_v2';
@@ -1723,31 +1727,41 @@ export const FeaturePackService = {
       }
       const fileName = `${filePrefix}_CatatanPintar_${safeDateTag}.pdf`;
 
-      // Gunakan jalur penyimpanan Blob bersama yang juga dipakai ekspor utama.
-      // Pemeriksaan Capacitor dilakukan di AttachmentService melalui API resmi,
-      // bukan bergantung pada window.Capacitor yang bisa tidak tersedia di WebView.
+      // Simpan PDF memakai alur yang sama dengan ekspor PDF utama:
+      // Android -> FileExport.exportFile(Base64), browser -> AttachmentService.
       if (!(pdfBlob instanceof Blob) || pdfBlob.size === 0) {
-        throw new Error('PDF laporan kosong atau gagal dibuat.');
+        throw new Error('Generator laporan menghasilkan PDF kosong.');
       }
-      const saveResult = await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
-      if (saveResult?.cancelled) {
-        this.ctx.toast('Ekspor PDF dibatalkan.', 'info');
-        return;
-      }
-      if (saveResult?.success === false) {
-        throw new Error('Berkas PDF belum berhasil disimpan. Silakan coba lagi.');
-      }
-      if (saveResult?.method === 'android-save-picker') {
-        const loc = saveResult?.location || 'lokasi yang kamu pilih';
-        this.ctx.toast(`✅ PDF tersimpan di ${loc}`, 'info', 6000);
-      } else if (saveResult?.method === 'blob-download') {
-        this.ctx.toast('PDF berhasil disiapkan untuk diunduh. Jika tidak terlihat, periksa folder Download.', 'info', 7000);
+
+      if (Capacitor.isNativePlatform()) {
+        const bytes = new Uint8Array(await pdfBlob.arrayBuffer());
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+        }
+        const result = await FileExport.exportFile({
+          fileName,
+          data: btoa(binary),
+          mimeType: 'application/pdf',
+          isBase64: true
+        });
+        this.ctx.toast(`✅ PDF tersimpan${result?.uri ? `: ${result.uri}` : ' di lokasi yang dipilih'}.`, 'info', 6000);
       } else {
-        this.ctx.toast('Laporan PDF berhasil dibuat dan disimpan.', 'info');
+        const saveResult = await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
+        if (saveResult?.cancelled) {
+          this.ctx.toast('Ekspor PDF dibatalkan.', 'info');
+          return;
+        }
+        this.ctx.toast('Laporan PDF berhasil dibuat dan diunduh.', 'info');
       }
       modal.classList.remove('open');
     } catch (err) {
-      this.ctx.toast(`Gagal membuat PDF: ${err.message || err}`, 'danger');
+      if (err?.code === 'USER_CANCELLED' || err?.message === 'USER_CANCELLED') {
+        this.ctx.toast('Ekspor PDF dibatalkan.', 'info');
+      } else {
+        this.ctx.toast(`Gagal membuat PDF: ${err.message || err}`, 'danger');
+      }
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = '📥 Unduh Laporan PDF';
