@@ -74,7 +74,6 @@ export const FinanceService = {
         });
     },
 
-    // HANDLER EKSPOR KEUANGAN
     async handleExport(eventOrFormat = 'json') {
         try {
             if (!this.transactions || this.transactions.length === 0) {
@@ -82,11 +81,12 @@ export const FinanceService = {
                 return;
             }
 
-            const result = await ExportImportService.exportFinance(this.transactions, eventOrFormat);
-            if (result && result.message) {
-                console.log(result.message);
+            // Memanggil ekspor keuangan tanpa mengganggu ekspor catatan utama
+            if (typeof ExportImportService.exportFinance === 'function') {
+                return await ExportImportService.exportFinance(this.transactions, eventOrFormat);
+            } else {
+                return await ExportImportService.exportNotes(this.transactions, eventOrFormat);
             }
-            return result;
         } catch (error) {
             if (error.message !== 'Ekspor dibatalkan.') {
                 console.error("Gagal melakukan ekspor keuangan:", error);
@@ -96,5 +96,5 @@ export const FinanceService = {
     }
 };
 
-// Export alias FinanceModule untuk menjaga kompatibilitas jika ada modul yang memanggil FinanceModule
+// Meng-export alias FinanceModule untuk kompatibilitas penuh
 export const FinanceModule = FinanceService;
