@@ -84,10 +84,33 @@ export const ExportImportService = {
             }
             if (format === 'zip') {
                 const blob = await this._generateZipBlob(notesArray, categoryMap, timestamp);
+                if (!(blob instanceof Blob) || blob.size < 22) {
+                    throw new Error('Berkas ZIP gagal dibuat atau kosong.');
+                }
                 fileName = `Catatan_Pintar_${timestamp}.zip`;
                 mimeType = 'application/zip';
+
+                // Samakan jalur penyimpanan Android dengan ekspor PDF utama:
+                // kirim ZIP sebagai Base64 ke ACTION_CREATE_DOCUMENT. Jangan gunakan
+                // jalur ekspor bertahap untuk format ini karena alur itu sebelumnya
+                // menjadi sumber ketidakkonsistenan pada perangkat.
+                if (Capacitor.isNativePlatform()) {
+                    const bytes = new Uint8Array(await blob.arrayBuffer());
+                    let binary = '';
+                    const chunkSize = 0x8000;
+                    for (let i = 0; i < bytes.length; i += chunkSize) {
+                        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+                    }
+                    const result = await FileExport.exportFile({
+                        fileName, data: btoa(binary), mimeType, isBase64: true
+                    });
+                    if (!result || result.success === false) throw new Error('Plugin Android gagal menyimpan berkas ZIP.');
+                    return { status: 'success', message: 'Ekspor berhasil.', result: { method: 'android-save-picker', location: result.uri || '' } };
+                }
+
                 const saveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
                 if (saveResult?.cancelled) return { status: 'cancelled', cancelled: true, message: 'Ekspor dibatalkan.' };
+                if (saveResult?.success === false) throw new Error('Berkas ZIP tidak berhasil disimpan.');
                 return { status: 'success', message: 'Ekspor berhasil.', result: saveResult };
             }
 
@@ -327,11 +350,60 @@ export const ExportImportService = {
     // --- HELPER: Buat ZIP biner sungguhan dengan JSZip (sudah termuat via CDN) ---
     // Berisi backup JSON penuh (untuk impor ulang) + ringkasan TXT yang mudah dibaca manusia.
     async _generateZipBlob(notesArray, categoryMap = {}, timestamp) {
-        if (!window.JSZip) throw new Error('Pustaka ZIP (JSZip) belum termuat. Coba muat ulang aplikasi.');
-        const zip = new window.JSZip();
-        zip.file(`Catatan_Pintar_${timestamp}_backup.json`, JSON.stringify(notesArray, null, 2));
-        zip.file(`Catatan_Pintar_${timestamp}_ringkasan.txt`, this._convertToText(notesArray, categoryMap));
-        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        const files = [
+            { name: `Catatan_Pintar_${timestamp}_backup.json`, data: JSON.stringify(notesArray, null, 2) },
+            { name: `Catatan_Pintar_${timestamp}_ringkasan.txt`, data: this._convertToText(notesArray, categoryMap) }
+        ];
+        // Gunakan JSZip jika CDN berhasil dimuat. Jika offline/CDN gagal di Android
+        // WebView, buat ZIP valid tanpa kompresi agar ekspor tetap dapat berjalan.
+        if (typeof window !== 'undefined' && window.JSZip) {
+            const zip = new window.JSZip();
+            files.forEach(file => zip.file(file.name, file.data));
+            return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        }
+        return this._generateStoredZipBlob(files);
+    },
+
+    // Generator ZIP fallback (metode STORE, tanpa kompresi) berbasis format ZIP standar.
+    // Ini menghindari ketergantungan wajib pada JSZip CDN saat aplikasi digunakan offline.
+    _generateStoredZipBlob(files) {
+        const encoder = new TextEncoder();
+        const crc32 = (bytes) => {
+            let crc = 0xffffffff;
+            for (let i = 0; i < bytes.length; i++) {
+                crc ^= bytes[i];
+                for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+            }
+            return (crc ^ 0xffffffff) >>> 0;
+        };
+        const u16 = (n) => [n & 255, (n >>> 8) & 255];
+        const u32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+        const localParts = [], centralParts = [];
+        let offset = 0;
+        for (const file of files) {
+            const name = encoder.encode(file.name);
+            const data = encoder.encode(file.data);
+            const crc = crc32(data);
+            const localHeader = new Uint8Array([
+                ...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0),
+                ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length),
+                ...u16(name.length), ...u16(0), ...name
+            ]);
+            localParts.push(localHeader, data);
+            const centralHeader = new Uint8Array([
+                ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0),
+                ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length),
+                ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...name
+            ]);
+            centralParts.push(centralHeader);
+            offset += localHeader.length + data.length;
+        }
+        const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+        const end = new Uint8Array([
+            ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
+            ...u32(centralSize), ...u32(offset), ...u16(0)
+        ]);
+        return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
     },
 
     async _exportWeb(stringData, fileName, mimeType) {
