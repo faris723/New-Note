@@ -112,81 +112,10 @@ export const ExportImportService = {
     },
 
     // ==========================================
-    // 2. EKSPOR KEUANGAN (JSON, TXT, DOC, PDF)
+    // 2. EKSPOR KEUANGAN (MENGGUNAKAN ENGINE UTAMA)
     // ==========================================
     async exportFinance(dataKeuangan, formatParam = 'json') {
-        try {
-            let format = 'json';
-
-            if (typeof formatParam === 'string') {
-                format = formatParam.toLowerCase();
-            } else if (formatParam && typeof formatParam === 'object') {
-                const target = formatParam.target || formatParam.currentTarget;
-                if (target) {
-                    const val = (target.dataset && target.dataset.format) || target.value || target.innerText || target.textContent || '';
-                    const text = val.toLowerCase();
-                    if (text.includes('pdf')) format = 'pdf';
-                    else if (text.includes('doc') || text.includes('word')) format = 'doc';
-                    else if (text.includes('txt')) format = 'txt';
-                } else if (formatParam.format) {
-                    format = formatParam.format.toLowerCase();
-                }
-            }
-
-            if (!['json', 'txt', 'doc', 'pdf'].includes(format)) {
-                format = 'json';
-            }
-
-            console.log(`Mengekspor keuangan format: ${format}`);
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-            let fileName = `Laporan_Keuangan_${timestamp}.${format}`;
-            let stringData = '';
-            let isBase64 = false;
-            let mimeType = 'text/plain';
-
-            let trxArray = Array.isArray(dataKeuangan) ? dataKeuangan : (dataKeuangan.transactions || dataKeuangan.transaksi || [dataKeuangan]);
-
-            if (format === 'json') {
-                stringData = JSON.stringify(dataKeuangan, null, 2);
-                mimeType = 'application/json';
-            } 
-            else if (format === 'txt') {
-                stringData = this._convertToTextFinance(trxArray);
-                mimeType = 'text/plain';
-            } 
-            else if (format === 'doc') {
-                stringData = this._convertToHTMLFinance(trxArray);
-                mimeType = 'application/msword';
-            } 
-            else if (format === 'pdf') {
-                const html2pdf = await loadExternalLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', 'html2pdf');
-                const htmlContent = this._convertToHTMLFinance(trxArray);
-
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = htmlContent;
-
-                const opt = {
-                    margin: 10,
-                    filename: fileName,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2 },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
-
-                const pdfBase64 = await html2pdf().set(opt).from(tempDiv).outputPdf('datauristring');
-                stringData = pdfBase64.split(',')[1];
-                isBase64 = true;
-                mimeType = 'application/pdf';
-            }
-
-            return await this._saveFile(fileName, stringData, mimeType, isBase64);
-
-        } catch (error) {
-            console.error("Proses ekspor keuangan gagal:", error);
-            if (error.message === 'USER_CANCELLED') throw new Error('Ekspor dibatalkan.');
-            throw new Error('Gagal mengekspor data keuangan: ' + error.message);
-        }
+        return await this.exportNotes(dataKeuangan, formatParam);
     },
 
     // ==========================================
@@ -249,7 +178,7 @@ export const ExportImportService = {
     },
 
     // ==========================================
-    // 5. HELPER KONVERSI (CATATAN)
+    // 5. HELPER KONVERSI TEKS & HTML
     // ==========================================
     _convertToText(notesArray) {
         let text = "=== ARSIP CATATAN PINTAR ===\n\n";
@@ -279,52 +208,6 @@ export const ExportImportService = {
         return html;
     },
 
-    // ==========================================
-    // 6. HELPER KONVERSI (KEUANGAN)
-    // ==========================================
-    _convertToTextFinance(financeArray) {
-        let text = "=== LAPORAN KEUANGAN ===\n\n";
-        let totalPemasukan = 0;
-        let totalPengeluaran = 0;
-
-        financeArray.forEach((trx, index) => {
-            const tipe = trx.type || trx.tipe || '-';
-            const nominal = Number(trx.amount || trx.nominal || 0);
-            const tanggal = trx.date || trx.tanggal || '-';
-            const deskripsi = trx.description || trx.deskripsi || '-';
-
-            if (tipe.toLowerCase() === 'pemasukan') totalPemasukan += nominal;
-            if (tipe.toLowerCase() === 'pengeluaran') totalPengeluaran += nominal;
-
-            text += `Transaksi #${index + 1}\nTipe      : ${tipe.toUpperCase()}\nNominal   : Rp ${nominal.toLocaleString('id-ID')}\nTanggal   : ${tanggal}\nKeterangan: ${deskripsi}\n--------------------------------------\n`;
-        });
-
-        text += `\nRINGKASAN\nTotal Pemasukan  : Rp ${totalPemasukan.toLocaleString('id-ID')}\nTotal Pengeluaran: Rp ${totalPengeluaran.toLocaleString('id-ID')}\nSALDO AKHIR       : Rp ${(totalPemasukan - totalPengeluaran).toLocaleString('id-ID')}\n======================================\n`;
-        return text;
-    },
-
-    _convertToHTMLFinance(financeArray) {
-        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Laporan Keuangan</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#333} table{width:100%;border-collapse:collapse;margin-top:20px;} th,td{border:1px solid #ccc;padding:10px;text-align:left;} th{background-color:#f4f4f4;} .in{color:green;font-weight:bold;} .out{color:red;font-weight:bold;} .summary{margin-top:30px;padding:15px;background:#f9f9f9;border-radius:8px;font-size:1.1em;}</style></head><body><h1 style="text-align:center;">Laporan Transaksi Keuangan</h1><table><thead><tr><th>No</th><th>Tanggal</th><th>Tipe</th><th>Keterangan</th><th>Nominal</th></tr></thead><tbody>`;
-
-        let totalPemasukan = 0;
-        let totalPengeluaran = 0;
-
-        financeArray.forEach((trx, index) => {
-            const tipe = trx.type || trx.tipe || '-';
-            const nominal = Number(trx.amount || trx.nominal || 0);
-            const isPemasukan = tipe.toLowerCase() === 'pemasukan';
-            const style = isPemasukan ? 'in' : 'out';
-
-            if (isPemasukan) totalPemasukan += nominal;
-            else if (tipe.toLowerCase() === 'pengeluaran') totalPengeluaran += nominal;
-
-            html += `<tr><td>${index + 1}</td><td>${trx.date || trx.tanggal || '-'}</td><td class="${style}">${tipe.toUpperCase()}</td><td>${trx.description || trx.deskripsi || '-'}</td><td class="${style}">Rp ${nominal.toLocaleString('id-ID')}</td></tr>`;
-        });
-
-        html += `</tbody></table><div class="summary"><p class="in">Total Pemasukan: Rp ${totalPemasukan.toLocaleString('id-ID')}</p><p class="out">Total Pengeluaran: Rp ${totalPengeluaran.toLocaleString('id-ID')}</p><hr><p><strong>SALDO AKHIR: Rp ${(totalPemasukan - totalPengeluaran).toLocaleString('id-ID')}</strong></p></div></body></html>`;
-        return html;
-    },
-
     // Helper Web untuk konversi base64 ke Blob
     _base64ToBlob(base64, mimeType) {
         const byteCharacters = atob(base64);
@@ -340,3 +223,4 @@ export const ExportImportService = {
         return new Blob(byteArrays, { type: mimeType });
     }
 };
+            
