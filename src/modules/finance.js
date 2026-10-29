@@ -1,7 +1,6 @@
 import { ExportImportService } from './exportImport.js';
 
-export const FinanceModule = {
-    // Penyimpanan data transaksi lokal/state
+export const FinanceService = {
     transactions: [],
 
     init() {
@@ -70,15 +69,12 @@ export const FinanceModule = {
     },
 
     bindEvents() {
-        // Otomatis menautkan event listener ke tombol-tombol ekspor keuangan jika ada di DOM
         document.querySelectorAll('[data-action="export-finance"]').forEach(button => {
             button.addEventListener('click', (e) => this.handleExport(e));
         });
     },
 
-    // ==========================================
     // HANDLER EKSPOR KEUANGAN
-    // ==========================================
     async handleExport(eventOrFormat = 'json') {
         try {
             if (!this.transactions || this.transactions.length === 0) {
@@ -86,9 +82,7 @@ export const FinanceModule = {
                 return;
             }
 
-            // Memanggil mesin ekspor dari exportImport.js
             const result = await ExportImportService.exportFinance(this.transactions, eventOrFormat);
-            
             if (result && result.message) {
                 console.log(result.message);
             }
@@ -101,3 +95,6 @@ export const FinanceModule = {
         }
     }
 };
+
+// Export alias FinanceModule untuk menjaga kompatibilitas jika ada modul yang memanggil FinanceModule
+export const FinanceModule = FinanceService;
