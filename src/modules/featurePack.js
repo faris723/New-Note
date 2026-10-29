@@ -1555,14 +1555,43 @@ export const FeaturePackService = {
             savings: this.savings,
             history: loadHistory()
           };
-          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-          const jsonSaveResult = await AttachmentService.saveOrDownloadBlob(blob, `catatan-pintar-keuangan-${today()}.json`, 'application/json');
+          const jsonText = JSON.stringify(payload, null, 2);
+          const fileName = `catatan-pintar-keuangan-${today()}.json`;
+          const mimeType = 'application/json';
+          const blob = new Blob([jsonText], { type: mimeType });
+          if (!(blob instanceof Blob) || blob.size === 0) {
+            throw new Error('Berkas JSON kosong atau gagal dibuat.');
+          }
+
+          let jsonSaveResult;
+          // Samakan jalur Android dengan ekspor JSON utama: kirim teks JSON
+          // sebagai Base64 ke plugin FileExport, bukan melalui AttachmentService.
+          if (Capacitor.isNativePlatform()) {
+            const bytes = new TextEncoder().encode(jsonText);
+            let binary = '';
+            const chunkSize = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+            }
+            const nativeResult = await FileExport.exportFile({
+              fileName, data: btoa(binary), mimeType, isBase64: true
+            });
+            if (!nativeResult || nativeResult.success === false) {
+              throw new Error('Plugin Android gagal menyimpan berkas JSON keuangan.');
+            }
+            jsonSaveResult = { success: true, method: 'android-save-picker', location: nativeResult.uri || '' };
+          } else {
+            jsonSaveResult = await AttachmentService.saveOrDownloadBlob(blob, fileName, mimeType);
+          }
+
           if (jsonSaveResult?.cancelled) {
             this.ctx.toast('Ekspor JSON dibatalkan.', 'info');
+          } else if (jsonSaveResult?.success === false) {
+            throw new Error('Berkas JSON keuangan tidak berhasil disimpan.');
           } else {
-            this.ctx.toast('Data JSON keuangan berhasil diunduh.', 'info');
+            this.ctx.toast('Data JSON keuangan berhasil diekspor.', 'info');
+            modal.classList.remove('open');
           }
-          modal.classList.remove('open');
         } catch (err) {
           this.ctx.toast(`Gagal ekspor JSON: ${err.message || err}`, 'danger');
         }
