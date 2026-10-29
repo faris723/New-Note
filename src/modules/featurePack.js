@@ -1723,16 +1723,27 @@ export const FeaturePackService = {
       }
       const fileName = `${filePrefix}_CatatanPintar_${safeDateTag}.pdf`;
 
+      // Gunakan jalur penyimpanan Blob bersama yang juga dipakai ekspor utama.
+      // Pemeriksaan Capacitor dilakukan di AttachmentService melalui API resmi,
+      // bukan bergantung pada window.Capacitor yang bisa tidak tersedia di WebView.
+      if (!(pdfBlob instanceof Blob) || pdfBlob.size === 0) {
+        throw new Error('PDF laporan kosong atau gagal dibuat.');
+      }
       const saveResult = await AttachmentService.saveOrDownloadBlob(pdfBlob, fileName, 'application/pdf');
       if (saveResult?.cancelled) {
         this.ctx.toast('Ekspor PDF dibatalkan.', 'info');
-      } else if (saveResult?.method === 'android-save-picker' || saveResult?.method === 'android-downloads') {
+        return;
+      }
+      if (saveResult?.success === false) {
+        throw new Error('Berkas PDF belum berhasil disimpan. Silakan coba lagi.');
+      }
+      if (saveResult?.method === 'android-save-picker') {
         const loc = saveResult?.location || 'lokasi yang kamu pilih';
         this.ctx.toast(`✅ PDF tersimpan di ${loc}`, 'info', 6000);
       } else if (saveResult?.method === 'blob-download') {
-        this.ctx.toast('PDF diproses lewat metode unduhan browser biasa — kalau tidak ketemu filenya, cek folder Download utama HP kamu, atau update aplikasi ke versi terbaru.', 'info', 7000);
+        this.ctx.toast('PDF berhasil disiapkan untuk diunduh. Jika tidak terlihat, periksa folder Download.', 'info', 7000);
       } else {
-        this.ctx.toast('Laporan PDF berhasil dibuat dan diunduh.', 'info');
+        this.ctx.toast('Laporan PDF berhasil dibuat dan disimpan.', 'info');
       }
       modal.classList.remove('open');
     } catch (err) {

@@ -4,6 +4,7 @@
  * file type classification, and HTML5 Canvas-based image compression.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { SecurityService } from './security.js';
 import { FileExport } from './pdfViewer.js';
 
@@ -249,7 +250,7 @@ export const AttachmentService = {
     // folder/file selection experience as the web File System Access picker.
     let nativeErrorReason = null;
     try {
-      if (window.Capacitor?.isNativePlatform?.()) {
+      if (Capacitor.isNativePlatform()) {
         if (!FileExport?.startExport || !FileExport?.appendExportChunk || !FileExport?.finishExport) {
           throw new Error('Plugin FileExport terbaru belum terpasang pada APK ini.');
         }
